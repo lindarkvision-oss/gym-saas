@@ -29,7 +29,7 @@ import {
 // ═══════════════════════════════════════════════════════════════════
 
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbwas3xX4RbqnRF7wZ4cG2xELuKlGY5eQ6QjLz-0QAHxgnlDMVEJ1op795O9xTiaCglh/exec",
+  API_URL: "https://script.google.com/macros/s/AKfycbyH4WKRRrYPBtfeYyg9xGdk06zBIqBtMLZKoo62gEqJxf_I6Mc1F1AQNjyCiQDI00pu/exec",
   APP_NAME: "Gym Nouvel Élan",
   VERSION: "2.1.0",
   PASSWORDS_KEY: "gym_passwords",
