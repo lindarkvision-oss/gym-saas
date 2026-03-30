@@ -195,7 +195,7 @@ const cache = {
 // ═══════════════════════════════════════════════════════════════════
 
 const fmtGNF = (n) =>
-  new Intl.NumberFormat("fr-GN", { style: "currency", currency: "GNF", minimumFractionDigits: 0 })
+  new Intl.NumberFormat("fr-GN", { style: "currency", currency: "FC", minimumFractionDigits: 0 })
     .format(Number(n) || 0);
 
 const fmtDate = (d) => {
