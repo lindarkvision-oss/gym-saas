@@ -2040,61 +2040,42 @@ const handleStartSeance = useCallback(async (data) => {
       const newClient = {
         id: genId(),
         nom: data.nom,
-        telephone: "",
-        objectif: "",
-        statut: "actif",
-        date_inscription: todayISO()
+        telephone: "", // À compléter plus tard si besoin
+        type: "Passagers",
+        date_inscription: new Date().toISOString(),
+        seances_restantes: 0
       };
 
       // Ajout local
       setClients(prev => [newClient, ...prev]);
       
       // Envoi au Sheets pour enregistrement définitif du client
-      try {
-        const res = await apiPost("addClient", newClient);
-        if (res?.id) finalClientId = String(res.id);
-        else finalClientId = newClient.id;
-      } catch (err) {
-        console.error("Erreur création client:", err);
-        // On garde l'ID local même si la synchro échoue
-        finalClientId = newClient.id;
-      }
+      await apiPost("addClient", newClient);
+      finalClientId = newClient.id;
     } 
     
     // --- CAS 2 : C'est un MEMBRE (Décompte séance) ---
     else if (data.isMember && finalClientId) {
-      const abo = abonnements.find(a => a.client_id === finalClientId && a.statut === "actif");
-      const seancesRestantes = abo?.seances_restantes ?? 0;
+      const client = clients.find(c => c.id === finalClientId);
+      const reste = Number(client?.seances_restantes) || 0;
 
-      if (seancesRestantes <= 0) {
-        if (!confirm("Ce membre n'a plus de séances. Voulez-vous quand même lancer la séance ?")) {
-          return;
-        }
-      } else {
-        // Mise à jour locale immédiate du compteur d'abonnement
-        setAbonnements(prev => prev.map(a => 
-          a.client_id === finalClientId && a.statut === "actif"
-            ? { ...a, seances_restantes: Math.max(0, seancesRestantes - 1) } 
-            : a
-        ));
-
-        // Notification au backend pour décompter
-        try {
-          await apiPost("updateAbonnementSeances", { 
-            client_id: finalClientId, 
-            seances_restantes: Math.max(0, seancesRestantes - 1) 
-          });
-        } catch (err) {
-          console.error("Erreur mise à jour compteur:", err);
-        }
+      if (reste <= 0) {
+        if (!confirm("Ce membre n'a plus de séances. Voulez-vous quand même lancer la séance ?")) return;
       }
+
+      // Mise à jour locale immédiate du compteur du client
+      setClients(prev => prev.map(c => 
+        c.id === finalClientId 
+          ? { ...c, seances_restantes: Math.max(0, reste - 1) } 
+          : c
+      ));
+
+      // Notification au backend pour décompter dans le Sheets
+      apiPost("updateClient", { id: finalClientId, seances_restantes: Math.max(0, reste - 1) });
     }
 
     // --- LANCEMENT DE LA SÉANCE ---
-    const rate = data.isMember 
-      ? { price: 0, durationMinutes: 120 } 
-      : (SESSION_RATES[data.rateKey] || { durationMinutes: 60, price: 4500 });
-    
+    const rate = SESSION_RATES[data.rateKey] || { durationMinutes: 120, price: 0 };
     const newSeance = {
       id: genId(),
       client_id: finalClientId,
@@ -2110,18 +2091,14 @@ const handleStartSeance = useCallback(async (data) => {
     setSeancesActives(prev => [newSeance, ...prev]);
     showToast("Succès", `Séance lancée pour ${finalNom}`, "success");
     
-    try {
-      await apiPost("startSeance", newSeance);
-    } catch (err) {
-      console.error("Erreur enregistrement séance:", err);
-      showToast("Attention", "Séance démarrée mais non synchronisée", "warning");
-    }
+    await apiPost("startSeance", newSeance);
 
   } catch (error) {
-    console.error("Erreur globale:", error);
+    console.error(error);
     showToast("Erreur", "Impossible de démarrer la séance", "error");
   }
-}, [clients, setClients, abonnements, setAbonnements, setSeancesActives, showToast]);  
+}, [clients, setClients, setSeancesActives, showToast]);
+  
   // ── RENDU ──────────────────────────────────────────────────────
   const authValue = { ...user };
 
