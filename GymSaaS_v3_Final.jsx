@@ -2021,29 +2021,39 @@ export default function App() {
     }
   }, [setSeancesActives, showToast]);
 
-  const handleEndSeance = useCallback(async (id) => {
-    const s = seancesActives.find(x => x.id === id);
+const handleEndSeance = useCallback(async (id, sessionData) => {
+    // On utilise sessionData s'il est fourni (beaucoup plus sûr après un rafraîchissement)
+    const s = sessionData || seancesActives.find(x => x.id === id);
     if (!s) return;
+    
+    // 1. Disparaît de l'écran direct
     setSeancesActives(p => p.filter(x => x.id !== id));
     
-    if (s.price > 0) {
+    // 2. Si c'est un VISITEUR (non membre), on encaisse obligatoirement l'argent !
+    if (!s.isMember && s.price > 0) {
+      const montant = Number(s.price);
       const tempId = genId();
       const desc = `Séance directe — ${s.nom} (${SESSION_RATES[s.type]?.label || s.type})`;
-      setCaisse(p => [normalizeCaisse({ id: tempId, date: new Date().toISOString(), description: desc, montant: s.price }), ...p]);
-      showToast("Séance terminée", `${fmtGNF(s.price)} encaissé`, "success");
+      
+      // On met dans la caisse locale (Dashboard mis à jour)
+      setCaisse(p => [normalizeCaisse({ id: tempId, date: new Date().toISOString(), description: desc, montant: montant }), ...p]);
+      showToast("Séance terminée", `${fmtGNF(montant)} encaissé en caisse`, "success");
+      
+      // On envoie à Google Sheets
       try {
-        // Remplacement de "addSeance" par "finishSeance" avec l'ID
-        const res = await apiPost("finishSeance", { id: s.id, nom: s.nom, type: s.type, debut: s.debut, fin: new Date().toISOString(), statut: "terminee", montant: s.price, description: desc });
+        const res = await apiPost("finishSeance", { id: s.id, nom: s.nom, type: s.type, debut: s.debut, fin: new Date().toISOString(), statut: "terminee", montant: montant, description: desc });
         if (res?.txId) setCaisse(p => p.map(t => t.id === tempId ? { ...t, id: String(res.txId) } : t));
       } catch {}
-    } else {
-      showToast("Séance terminée", "Séance membre clôturée", "info");
+    } 
+    // 3. Si c'est un MEMBRE (gratuit)
+    else {
+      showToast("Séance terminée", "Séance membre clôturée (0 GNF)", "info");
       try { 
-        // Remplacement de "addSeance" par "finishSeance" avec l'ID
         await apiPost("finishSeance", { id: s.id, nom: s.nom, type: "membre", debut: s.debut, fin: new Date().toISOString(), statut: "terminee" }); 
       } catch {}
     }
   }, [seancesActives, setSeancesActives, setCaisse, showToast]);
+  
   // ── RENDU ──────────────────────────────────────────────────────
   const authValue = { ...user };
 
