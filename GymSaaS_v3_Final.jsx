@@ -745,17 +745,25 @@ const [resC, resA, resCa, resS] = await Promise.all([
       const newAbos = extract(resA).map(normalizeAbonnement);
       const newCaisse = extract(resCa).map(normalizeCaisse);
 
-      // Extraction et filtrage des séances pour ne garder que celles "en_cours"
+// Extraction et filtrage des séances pour ne garder que celles "en_cours"
       const newSeances = extract(resS)
         .filter(s => s.statut === "en_cours")
-        .map(s => ({
-          ...s,
-          id: String(s.id),
-          price: Number(s.price) || 0,
-          durationMinutes: Number(s.durationMinutes) || 120,
-          isMember: s.type === "membre" || s.isMember === true || s.isMember === "true"
-        }));
+        .map(s => {
+          // Sécurisation stricte des types de données
+          const isMembre = String(s.type).toLowerCase() === "membre" || s.isMember === true || s.isMember === "true";
+          // Si c'est un membre c'est 120 min max, sinon c'est la durée définie (souvent 60)
+          const dureeParDefaut = isMembre ? 120 : 60; 
 
+          return {
+            ...s,
+            id: String(s.id),
+            price: Number(s.price) || 0,
+            durationMinutes: Number(s.durationMinutes) || dureeParDefaut,
+            isMember: isMembre,
+            debut: s.debut
+          };
+        });
+      
       setClients(newClients);
       setAbonnements(newAbos);
       setCaisse(newCaisse);
