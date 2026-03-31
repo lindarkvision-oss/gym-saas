@@ -1355,9 +1355,9 @@ const SeancesView = memo(({ seancesActives, clients, now, onStart, onEnd }) => {
   const [form, setForm] = useState({ isMember: false, client_id: "", nom_visiteur: "", rateKey: "" });
   const [tick, setTick] = useState(0);
 
-  // Tick toutes les 30s pour mettre à jour les timers
+// Tick toutes les 1s pour mettre à jour les timers en direct
   useEffect(() => {
-    const t = setInterval(() => setTick(x => x + 1), 30_000);
+    const t = setInterval(() => setTick(x => x + 1), 1000);
     return () => clearInterval(t);
   }, []);
 
@@ -1397,12 +1397,21 @@ const SeancesView = memo(({ seancesActives, clients, now, onStart, onEnd }) => {
         : (
           <div style={S.grid3}>
             {seancesActives.map(s => {
-              const elapsed = Math.floor((now - new Date(s.debut)) / 60_000);
-              const remaining = s.durationMinutes - elapsed;
-              const urgent = remaining <= 5 && remaining > 0;
-              const over = remaining <= 0;
-              const hh = Math.max(0, Math.floor(remaining / 60)).toString().padStart(2, "0");
-              const mm = Math.max(0, remaining % 60).toString().padStart(2, "0");
+              // Calcul précis en millisecondes
+              const debutMs = new Date(s.debut).getTime();
+              const finPrevueMs = debutMs + (s.durationMinutes * 60 * 1000);
+              const resteMs = finPrevueMs - Date.now();
+              
+              const totalSeconds = Math.max(0, Math.floor(resteMs / 1000));
+              
+              const over = totalSeconds <= 0;
+              const urgent = totalSeconds <= 300 && totalSeconds > 0; // Urgent si moins de 5 min
+              
+              // Formatage HH:MM:SS
+              const hh = Math.floor(totalSeconds / 3600).toString().padStart(2, "0");
+              const mm = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, "0");
+              const ss = (totalSeconds % 60).toString().padStart(2, "0");
+
               return (
                 <div key={s.id} style={{ ...S.subCard, borderColor: over ? T.redBd : urgent ? "#4d2e00" : T.border }}>
                   <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.surface3}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -1416,7 +1425,7 @@ const SeancesView = memo(({ seancesActives, clients, now, onStart, onEnd }) => {
                   </div>
                   <div style={{ padding: "20px 16px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
                     <div style={S.timerBig(urgent || over)}>
-                      {over ? "FINI" : `${hh}:${mm}`}
+                      {over ? "FINI" : `${hh}:${mm}:${ss}`}
                     </div>
                     <div style={{ fontSize: 10, color: over ? T.red : urgent ? T.orange : T.textDim, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>
                       {over ? "Temps écoulé !" : urgent ? "⚠ Bientôt terminé" : "Restant"}
@@ -1429,7 +1438,8 @@ const SeancesView = memo(({ seancesActives, clients, now, onStart, onEnd }) => {
           </div>
         )
       }
-
+    </div>
+  );
       <Modal open={modal} onClose={() => setModal(false)} title="Démarrer une séance">
         <div style={{ display: "flex", gap: 7, marginBottom: 18 }}>
           {["Visiteur direct", "Membre abonné"].map((label, i) => (
