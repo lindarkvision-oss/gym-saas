@@ -1046,15 +1046,17 @@ const ClientsView = memo(({ clients, abonnements, caisse, now, syncing, onAdd, o
     [caisse]
   );
 
-  const handleSave = async () => {
-    if (!form.nom.trim()) { showToast("Champ requis", "Le nom est obligatoire", "error"); return; }
-    setSaving(true);
-    await onAdd(form);
-    setForm({ nom: "", telephone: "", objectif: "", statut: "actif" });
-    setModalAdd(false);
-    setSaving(false);
-  };
-
+const handleSave = async () => {
+  if (!form.nom.trim()) { showToast("Champ requis", "Le nom est obligatoire", "error"); return; }
+  if (!form.telephone.trim()) { showToast("Champ requis", "Le téléphone est obligatoire", "error"); return; }
+  if (!form.objectif) { showToast("Champ requis", "Veuillez sélectionner un objectif", "error"); return; }
+  setSaving(true);
+  await onAdd(form);
+  setForm({ nom: "", telephone: "", objectif: "", statut: "actif" });
+  setModalAdd(false);
+  setSaving(false);
+};
+  
   const exportCSV = useCallback(() => {
     const rows = filtered.map(c => {
       const sub = getClientSubStatus(c.id, abonnements, now);
@@ -1269,18 +1271,18 @@ const AbonnementsView = memo(({ abonnements, clients, now, syncing, onAdd, onDel
     return res.sort((a, b) => new Date(b.fin) - new Date(a.fin));
   }, [abonnements, clients, filter, search]);
 
-  const handleSave = async () => {
-    if (!form.client_id || !form.type || !form.debut) {
-      showToast("Champs requis", "Veuillez remplir tous les champs", "error");
-      return;
-    }
-    setSaving(true);
-    await onAdd(form.client_id, form.type, new Date(form.debut));
-    setForm({ client_id: "", type: "", debut: todayISO() });
-    setModalAdd(false);
-    setSaving(false);
-  };
-
+const handleSave = async () => {
+  if (!form.client_id || !form.type || !form.debut) {
+    showToast("Champs requis", "Veuillez remplir tous les champs", "error");
+    return;
+  }
+  setSaving(true);
+  await onAdd(form.client_id, form.type, new Date(form.debut));
+  setForm({ client_id: "", type: "", debut: todayISO() });
+  setModalAdd(false);
+  setSaving(false);
+};
+  
   return (
     <div>
       <div style={S.pageHeader}>
@@ -1420,19 +1422,34 @@ const SeancesView = memo(({ seancesActives, clients, onStart, onEnd }) => {
     return () => clearInterval(interval);
   }, []);
 
-  const handleStart = () => {
-    if (!form.isMember && !form.rateKey) return;
-    const client = form.isMember ? clients.find(c => c.id === form.client_id) : null;
-    onStart({
-      isMember: form.isMember,
-      client_id: form.isMember ? form.client_id : null,
-      nom: client ? client.nom : form.nom_visiteur || "Visiteur",
-      rateKey: form.rateKey,
-    });
-    setForm({ isMember: false, client_id: "", nom_visiteur: "", rateKey: "" });
-    setModal(false);
-  };
+const handleStart = () => {
+  if (form.isMember) {
+    if (!form.client_id) {
+      showToast("Champ requis", "Veuillez sélectionner un membre", "error");
+      return;
+    }
+  } else {
+    if (!form.nom_visiteur.trim()) {
+      showToast("Champ requis", "Veuillez saisir le nom du visiteur", "error");
+      return;
+    }
+    if (!form.rateKey) {
+      showToast("Champ requis", "Veuillez sélectionner un tarif", "error");
+      return;
+    }
+  }
 
+  const client = form.isMember ? clients.find(c => c.id === form.client_id) : null;
+  onStart({
+    isMember: form.isMember,
+    client_id: form.isMember ? form.client_id : null,
+    nom: client ? client.nom : form.nom_visiteur.trim(),
+    rateKey: form.rateKey,
+  });
+  setForm({ isMember: false, client_id: "", nom_visiteur: "", rateKey: "" });
+  setModal(false);
+};
+  
   const selectedRate = SESSION_RATES[form.rateKey];
 
   return (
@@ -2342,29 +2359,35 @@ function AdvancedSettingsView() {
     { id: "sessions", label: "⏱️ Séances", icon: "⏱️" },
   ];
 
-  const handleSavePrices = () => {
-    setSavingPrices(true);
-    try {
-      // Mise à jour des prix dans le state
-      updateFlatSetting("subscriptionPrices", tempSubscriptionPrices);
-      updateFlatSetting("sessionPrices", tempSessionPrices);
-      
-      // Mise à jour des constantes globales pour une utilisation immédiate
-      Object.keys(tempSubscriptionPrices).forEach(key => {
-        if (SUB_TYPES[key]) SUB_TYPES[key].price = tempSubscriptionPrices[key];
-      });
-      Object.keys(tempSessionPrices).forEach(key => {
-        if (SESSION_RATES[key]) SESSION_RATES[key].price = tempSessionPrices[key];
-      });
-      
-      showToast("Tarifs mis à jour", "Les nouveaux prix sont effectifs", "success");
-    } catch (err) {
-      showToast("Erreur", "Impossible de sauvegarder les tarifs", "error");
-    } finally {
-      setSavingPrices(false);
+const handleSavePrices = () => {
+  // Vérifier que tous les prix sont des nombres positifs
+  const allPrices = { ...tempSubscriptionPrices, ...tempSessionPrices };
+  for (const [key, value] of Object.entries(allPrices)) {
+    if (isNaN(value) || value < 0) {
+      showToast("Erreur", `Le prix pour ${key} est invalide`, "error");
+      return;
     }
-  };
+  }
 
+  setSavingPrices(true);
+  try {
+    updateFlatSetting("subscriptionPrices", tempSubscriptionPrices);
+    updateFlatSetting("sessionPrices", tempSessionPrices);
+
+    Object.keys(tempSubscriptionPrices).forEach(key => {
+      if (SUB_TYPES[key]) SUB_TYPES[key].price = tempSubscriptionPrices[key];
+    });
+    Object.keys(tempSessionPrices).forEach(key => {
+      if (SESSION_RATES[key]) SESSION_RATES[key].price = tempSessionPrices[key];
+    });
+
+    showToast("Tarifs mis à jour", "Les nouveaux prix sont effectifs", "success");
+  } catch (err) {
+    showToast("Erreur", "Impossible de sauvegarder les tarifs", "error");
+  } finally {
+    setSavingPrices(false);
+  }
+};
   const handleResetAll = () => {
     if (window.confirm("⚠️ Réinitialiser TOUS les paramètres avancés ?\n\nCette action est irréversible.")) {
       resetToDefaults();
