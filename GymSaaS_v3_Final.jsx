@@ -101,17 +101,17 @@ const can = (role, permission) => PERMISSIONS[role]?.includes(permission) ?? fal
 // ═══════════════════════════════════════════════════════════════════
 
 const SUB_TYPES = {
-  mensuel:   { label: "Mensuel Illimité",  price: 200_000, duration: 30, maxSessions: null },
-  seances16: { label: "16 Séances / Mois", price: 140_000, duration: 30, maxSessions: 16 },
-  seances12: { label: "12 Séances / Mois", price: 120_000, duration: 30, maxSessions: 12 },
+  mensuel:   { label: "Mensuel Illimité",  price: 115_000, duration: 30, maxSessions: null },
+  seances16: { label: "16 Séances / Mois", price: 80_500, duration: 30, maxSessions: 16 },
+  seances12: { label: "12 Séances / Mois", price: 57_500, duration: 30, maxSessions: 12 },
 };
 
 const SESSION_RATES = {
-  no_coach_1h:     { label: "Sans coach — 1h",    price: 8_000,  durationMinutes: 60 },
-  no_coach_2h:     { label: "Sans coach — 2h",    price: 14_000, durationMinutes: 120 },
-  with_coach_1h:   { label: "Avec coach — 1h",    price: 12_000, durationMinutes: 60 },
-  with_coach_1h30: { label: "Avec coach — 1h30",  price: 16_000, durationMinutes: 90 },
-  with_coach_2h:   { label: "Avec coach — 2h",    price: 18_000, durationMinutes: 120 },
+  no_coach_1h:     { label: "Sans coach — 1h",    price: 4_500,  durationMinutes: 60 },
+  no_coach_2h:     { label: "Sans coach — 2h",    price: 7_500, durationMinutes: 120 },
+  with_coach_1h:   { label: "Avec coach — 1h",    price: 6_500, durationMinutes: 60 },
+  with_coach_1h30: { label: "Avec coach — 1h30",  price: 8_000, durationMinutes: 90 },
+  with_coach_2h:   { label: "Avec coach — 2h",    price: 10_000, durationMinutes: 120 },
 };
 
 const OBJECTIFS = ["Perte de poids", "Prise de masse", "Entretien / Santé", "Cardio", "Préparation sportive"];
