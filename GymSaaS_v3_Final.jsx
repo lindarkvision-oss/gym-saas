@@ -732,10 +732,11 @@ function useGymData(showToast) {
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setSyncing(true);
     try {
-      const [resC, resA, resCa] = await Promise.all([
+const [resC, resA, resCa, resS] = await Promise.all([
         apiGet("clients"),
         apiGet("abonnements"),
         apiGet("caisse"),
+        apiGet("seances"), // Ajout de la récupération des séances
       ]);
 
       const extract = (res) => Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
@@ -744,12 +745,33 @@ function useGymData(showToast) {
       const newAbos = extract(resA).map(normalizeAbonnement);
       const newCaisse = extract(resCa).map(normalizeCaisse);
 
+      // Extraction et filtrage des séances pour ne garder que celles "en_cours"
+      const newSeances = extract(resS)
+        .filter(s => s.statut === "en_cours")
+        .map(s => ({
+          ...s,
+          id: String(s.id),
+          price: Number(s.price) || 0,
+          durationMinutes: Number(s.durationMinutes) || 120,
+          isMember: s.type === "membre" || s.isMember === true || s.isMember === "true"
+        }));
+
       setClients(newClients);
       setAbonnements(newAbos);
       setCaisse(newCaisse);
+      setSeancesActives(newSeances); // Recharge les chronomètres actifs
+      
       setOffline(false);
       setLastSync(new Date());
-      cache.save({ clients: newClients, abonnements: newAbos, caisse: newCaisse });
+
+      // Mise à jour du cache avec toutes les données incluant les séances
+      cache.save({ 
+        clients: newClients, 
+        abonnements: newAbos, 
+        caisse: newCaisse, 
+        seances: newSeances 
+      });
+
       if (!silent) setLoading(false);
     } catch (err) {
       setOffline(true);
@@ -758,7 +780,7 @@ function useGymData(showToast) {
     } finally {
       setSyncing(false);
     }
-  }, [showToast]);
+  }, [showToast, setClients, setAbonnements, setCaisse, setSeancesActives]);
 
   useEffect(() => {
     loadData();
@@ -775,7 +797,6 @@ function useGymData(showToast) {
     loadData,
   };
 }
-
 // ═══════════════════════════════════════════════════════════════════
 // 13. HOOK TOAST
 // ═══════════════════════════════════════════════════════════════════
