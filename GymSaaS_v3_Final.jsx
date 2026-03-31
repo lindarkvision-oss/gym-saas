@@ -1355,129 +1355,52 @@ const SeancesView = memo(({ seancesActives, clients, onStart, onEnd }) => {
   const [form, setForm] = useState({ isMember: false, client_id: "", nom_visiteur: "", rateKey: "" });
   const [tick, setTick] = useState(0);
 
-  // TICK TOUTES LES SECONDES
-  useEffect(() => {
-    const t = setInterval(() => setTick(x => x + 1), 1000);
-    return () => clearInterval(t);
-  }, []);
+{seancesActives.map(s => {
+  // --- CALCUL EN TEMPS RÉEL (Grâce au tick) ---
+  const debutMs = new Date(s.debut).getTime();
+  const finPrevueMs = debutMs + (s.durationMinutes * 60 * 1000);
+  const diffMs = finPrevueMs - Date.now(); // On utilise Date.now() ici
   
-// Tick toutes les 1s pour mettre à jour les timers en direct
-  useEffect(() => {
-    const t = setInterval(() => setTick(x => x + 1), 1000);
-    return () => clearInterval(t);
-  }, []);
+  const totalSec = Math.max(0, Math.floor(diffMs / 1000));
+  const over = totalSec <= 0;
+  const urgent = totalSec <= 300 && totalSec > 0; // Orange si < 5 min
 
-  const handleStart = () => {
-    if (!form.isMember && !form.rateKey) return;
-    const client = form.isMember ? clients.find(c => c.id === form.client_id) : null;
-    onStart({
-      isMember: form.isMember,
-      client_id: form.isMember ? form.client_id : null,
-      nom: client ? client.nom : form.nom_visiteur || "Visiteur",
-      rateKey: form.rateKey,
-    });
-    setForm({ isMember: false, client_id: "", nom_visiteur: "", rateKey: "" });
-    setModal(false);
-  };
-
-  const selectedRate = SESSION_RATES[form.rateKey];
+  const hh = Math.floor(totalSec / 3600).toString().padStart(2, "0");
+  const mm = Math.floor((totalSec % 3600) / 60).toString().padStart(2, "0");
+  const ss = (totalSec % 60).toString().padStart(2, "0");
 
   return (
-    <div>
-      <div style={S.pageHeader}>
-        <div>
-          <h1 style={S.pageTitle}>Séances directes</h1>
-          <div style={S.pageSubtitle}>{seancesActives.length} séance(s) active(s)</div>
+    <div key={s.id} style={{ ...S.subCard, borderColor: over ? T.redBd : urgent ? T.orange : T.border }}>
+      <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.surface3}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontWeight: 700, color: T.text, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.nom}</div>
+          <span style={S.pill(s.isMember ? T.purple : T.orange)}>
+            {s.isMember ? "Membre" : "Visiteur"} · {s.price > 0 ? fmtGNF(s.price) : "Gratuit"}
+          </span>
         </div>
-        <button style={S.btn("orange")} onClick={() => setModal(true)}>▶ Démarrer une séance</button>
+        <button style={S.btn("ghost")} onClick={() => onEnd(s.id)}>Terminer</button>
       </div>
 
-      {!seancesActives.length
-        ? (
-          <div style={{ ...S.card, padding: "60px 24px", textAlign: "center" }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>⏱</div>
-            <div style={{ fontWeight: 700, color: T.textMid, fontSize: 15 }}>Aucune séance active</div>
-            <div style={{ color: T.textDim, fontSize: 12, marginTop: 6 }}>Cliquez sur "Démarrer" pour chronomètrer une séance</div>
-          </div>
-        )
-        : (
-          <div style={S.grid3}>
-            {seancesActives.map(s => {
-              // Calcul précis en millisecondes
-              const debutMs = new Date(s.debut).getTime();
-              const finPrevueMs = debutMs + (s.durationMinutes * 60 * 1000);
-              const resteMs = finPrevueMs - Date.now();
-              
-              const totalSeconds = Math.max(0, Math.floor(resteMs / 1000));
-              
-              const over = totalSeconds <= 0;
-              const urgent = totalSeconds <= 300 && totalSeconds > 0; // Urgent si moins de 5 min
-              
-              // Formatage HH:MM:SS
-              const hh = Math.floor(totalSeconds / 3600).toString().padStart(2, "0");
-              const mm = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, "0");
-              const ss = (totalSeconds % 60).toString().padStart(2, "0");
-
-              return (
-                <div key={s.id} style={{ ...S.subCard, borderColor: over ? T.redBd : urgent ? "#4d2e00" : T.border }}>
-                  <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.surface3}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontWeight: 700, color: T.text, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.nom}</div>
-                      <span style={S.pill(s.isMember ? T.purple : T.orange)}>
-                        {s.isMember ? "Membre" : "Visiteur"} · {s.price > 0 ? fmtGNF(s.price) : "Gratuit"}
-                      </span>
-                    </div>
-                    <button style={S.btn("ghost")} onClick={() => onEnd(s.id)}>Terminer</button>
-                  </div>
-                  <div style={{ padding: "20px 16px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                    <div style={S.timerBig(urgent || over)}>
-                      {over ? "FINI" : `${hh}:${mm}:${ss}`}
-                    </div>
-                    <div style={{ fontSize: 10, color: over ? T.red : urgent ? T.orange : T.textDim, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>
-                      {over ? "Temps écoulé !" : urgent ? "⚠ Bientôt terminé" : "Restant"}
-                    </div>
-                    <div style={{ fontSize: 10, color: T.textFaint }}>Débuté à {fmtTime(s.debut)}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )
-      }
-    </div>
-  );
-      <Modal open={modal} onClose={() => setModal(false)} title="Démarrer une séance">
-        <div style={{ display: "flex", gap: 7, marginBottom: 18 }}>
-          {["Visiteur direct", "Membre abonné"].map((label, i) => (
-            <span key={label} style={{ ...S.fPill(form.isMember === (i === 1)), flex: 1, justifyContent: "center", display: "flex" }}
-              onClick={() => setForm({ ...form, isMember: i === 1, client_id: "", rateKey: "" })}>
-              {label}
-            </span>
-          ))}
+      <div style={{ padding: "20px 16px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+        {/* AFFICHAGE DU COMPTEUR HH:MM:SS */}
+        <div style={{ 
+          fontSize: 32, 
+          fontWeight: 800, 
+          fontFamily: "monospace", 
+          color: over ? T.red : urgent ? T.orange : "#4ade80",
+          letterSpacing: "-1px"
+        }}>
+          {over ? "FINI" : `${hh}:${mm}:${ss}`}
         </div>
 
-        {form.isMember
-          ? <Sel label="Membre" value={form.client_id} onChange={e => setForm({ ...form, client_id: e.target.value })}>
-              <option value="">Sélectionner un membre...</option>
-              {clients.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
-            </Sel>
-          : <>
-              <Inp label="Nom du visiteur" value={form.nom_visiteur} onChange={e => setForm({ ...form, nom_visiteur: e.target.value })} placeholder="Ex: Jean Martin" />
-              <Sel label="Tarif" value={form.rateKey} onChange={e => setForm({ ...form, rateKey: e.target.value })}>
-                <option value="">Sélectionner un tarif...</option>
-                {Object.entries(SESSION_RATES).map(([k, v]) => (
-                  <option key={k} value={k}>{v.label} — {fmtGNF(v.price)}</option>
-                ))}
-              </Sel>
-              {selectedRate && (
-                <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 13px", marginBottom: 14, fontSize: 12, color: T.textDim }}>
-                  ⏱ Durée : <strong style={{ color: T.text }}>{selectedRate.durationMinutes} min</strong>
-                  <span style={{ marginLeft: 12, color: T.green, fontWeight: 700 }}>💰 {fmtGNF(selectedRate.price)}</span>
-                </div>
-              )}
-            </>
-        }
-
+        <div style={{ fontSize: 10, color: over ? T.red : urgent ? T.orange : T.textDim, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700 }}>
+          {over ? "Temps écoulé !" : urgent ? "⚠ Bientôt terminé" : "Temps Restant"}
+        </div>
+        <div style={{ fontSize: 10, color: T.textFaint }}>Débuté à {fmtTime(s.debut)}</div>
+      </div>
+    </div>
+  );
+})}
         {form.isMember && (
           <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 13px", marginBottom: 14, fontSize: 11, color: T.textDim }}>
             ℹ Séance membre — durée 2h max, aucun encaissement automatique.
