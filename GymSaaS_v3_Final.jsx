@@ -2130,7 +2130,7 @@ const handleEndSeance = useCallback(async (id, sessionData) => {
                     <CaisseView caisse={caisse} now={now} syncing={syncing} />
                   )}
                   {view === "parametres" && user.role === "admin" && (
-                    <ParametresView />
+                    <ParametresViewV2 />
                   )}
                 </div>
               )
@@ -2195,3 +2195,476 @@ const GLOBAL_CSS = `
     table { font-size: 11px !important; }
   }
 `;
+
+// ═══════════════════════════════════════════════════════════════════
+// 19-B. NOUVEAUX PARAMÈTRES AVANCÉS (admin uniquement)
+// ═══════════════════════════════════════════════════════════════════
+
+// Hook pour la gestion des paramètres globaux (localStorage)
+function useSettings() {
+  const [settings, setSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem("gym_advanced_settings");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      // A. Paramètres généraux
+      gymName: "Gym Nouvel Élan",
+      primaryColor: "#4ade80",
+      currency: "CDF",
+      timezone: "Africa/Kinshasa",
+      logoUrl: "",
+      
+      // B. Paramètres des tarifs (abonnements)
+      subscriptionPrices: {
+        mensuel: 115000,
+        seances16: 80500,
+        seances12: 57500,
+      },
+      sessionPrices: {
+        no_coach_1h: 4500,
+        no_coach_2h: 7500,
+        with_coach_1h: 6500,
+        with_coach_1h30: 8000,
+        with_coach_2h: 10000,
+      },
+      
+      // C. Paramètres des notifications
+      whatsappMessage: "Bonjour {name}, votre abonnement {status}. Venez renouveler au Gym Nouvel Élan 💪",
+      alertDaysBefore: 3,
+      enableNotifications: true,
+      
+      // E. Paramètres des séances
+      memberSessionDuration: 120,
+      visitorDefaultDuration: 60,
+      memberFree: true,
+    };
+  });
+
+  const updateSetting = useCallback((category, key, value) => {
+    setSettings(prev => {
+      const updated = { ...prev, [category]: { ...prev[category], [key]: value } };
+      localStorage.setItem("gym_advanced_settings", JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  const updateFlatSetting = useCallback((key, value) => {
+    setSettings(prev => {
+      const updated = { ...prev, [key]: value };
+      localStorage.setItem("gym_advanced_settings", JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  const resetToDefaults = useCallback(() => {
+    const defaults = {
+      gymName: "Gym Nouvel Élan",
+      primaryColor: "#4ade80",
+      currency: "CDF",
+      timezone: "Africa/Kinshasa",
+      logoUrl: "",
+      subscriptionPrices: { mensuel: 115000, seances16: 80500, seances12: 57500 },
+      sessionPrices: { no_coach_1h: 4500, no_coach_2h: 7500, with_coach_1h: 6500, with_coach_1h30: 8000, with_coach_2h: 10000 },
+      whatsappMessage: "Bonjour {name}, votre abonnement {status}. Venez renouveler au Gym Nouvel Élan 💪",
+      alertDaysBefore: 3,
+      enableNotifications: true,
+      memberSessionDuration: 120,
+      visitorDefaultDuration: 60,
+      memberFree: true,
+    };
+    localStorage.setItem("gym_advanced_settings", JSON.stringify(defaults));
+    setSettings(defaults);
+  }, []);
+
+  return { settings, updateSetting, updateFlatSetting, resetToDefaults };
+}
+
+// Composant pour les paramètres avancés
+function AdvancedSettingsView() {
+  const { role } = useAuth();
+  const showToast = useToast();
+  const { settings, updateFlatSetting, resetToDefaults } = useSettings();
+  
+  const [activeTab, setActiveTab] = useState("general");
+  const [tempSubscriptionPrices, setTempSubscriptionPrices] = useState(settings.subscriptionPrices);
+  const [tempSessionPrices, setTempSessionPrices] = useState(settings.sessionPrices);
+  const [savingPrices, setSavingPrices] = useState(false);
+
+  // Seul l'admin peut accéder
+  if (role !== "admin") {
+    return (
+      <div>
+        <h1 style={S.pageTitle}>Paramètres avancés</h1>
+        <div style={{ ...S.card, padding: "40px 24px", textAlign: "center" }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
+          <div style={{ fontWeight: 700, color: T.textMid }}>Accès réservé à l'administrateur</div>
+        </div>
+      </div>
+    );
+  }
+
+  const tabs = [
+    { id: "general", label: "🔐 Généraux", icon: "🏢" },
+    { id: "prices", label: "💰 Tarifs", icon: "💵" },
+    { id: "notifications", label: "📱 Notifications", icon: "🔔" },
+    { id: "sessions", label: "⏱️ Séances", icon: "⏱️" },
+  ];
+
+  const handleSavePrices = () => {
+    setSavingPrices(true);
+    try {
+      // Mise à jour des prix dans le state
+      updateFlatSetting("subscriptionPrices", tempSubscriptionPrices);
+      updateFlatSetting("sessionPrices", tempSessionPrices);
+      
+      // Mise à jour des constantes globales pour une utilisation immédiate
+      Object.keys(tempSubscriptionPrices).forEach(key => {
+        if (SUB_TYPES[key]) SUB_TYPES[key].price = tempSubscriptionPrices[key];
+      });
+      Object.keys(tempSessionPrices).forEach(key => {
+        if (SESSION_RATES[key]) SESSION_RATES[key].price = tempSessionPrices[key];
+      });
+      
+      showToast("Tarifs mis à jour", "Les nouveaux prix sont effectifs", "success");
+    } catch (err) {
+      showToast("Erreur", "Impossible de sauvegarder les tarifs", "error");
+    } finally {
+      setSavingPrices(false);
+    }
+  };
+
+  const handleResetAll = () => {
+    if (window.confirm("⚠️ Réinitialiser TOUS les paramètres avancés ?\n\nCette action est irréversible.")) {
+      resetToDefaults();
+      setTempSubscriptionPrices(settings.subscriptionPrices);
+      setTempSessionPrices(settings.sessionPrices);
+      showToast("Paramètres réinitialisés", "Valeurs par défaut restaurées", "success");
+    }
+  };
+
+  return (
+    <div>
+      <div style={S.pageHeader}>
+        <div>
+          <h1 style={S.pageTitle}>Paramètres avancés</h1>
+          <div style={S.pageSubtitle}>Configuration complète de l'application</div>
+        </div>
+        <button style={S.btn("danger")} onClick={handleResetAll}>
+          ↺ Tout réinitialiser
+        </button>
+      </div>
+
+      {/* Onglets */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 24, flexWrap: "wrap", borderBottom: `1px solid ${T.border}`, paddingBottom: 8 }}>
+        {tabs.map(tab => (
+          <span
+            key={tab.id}
+            style={{
+              ...S.fPill(activeTab === tab.id),
+              padding: "8px 18px",
+              fontSize: 12,
+            }}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.icon} {tab.label}
+          </span>
+        ))}
+      </div>
+
+      {/* Contenu des onglets */}
+      <div style={{ ...S.card, maxWidth: 700 }}>
+        {/* A. PARAMÈTRES GÉNÉRAUX */}
+        {activeTab === "general" && (
+          <div>
+            <div style={S.cardHead}>
+              <span style={S.cardTitle}>🏢 Paramètres généraux</span>
+            </div>
+            <div style={{ padding: "18px" }}>
+              <Inp
+                label="Nom de la salle"
+                value={settings.gymName}
+                onChange={e => updateFlatSetting("gymName", e.target.value)}
+                placeholder="Gym Nouvel Élan"
+              />
+              <Inp
+                label="Couleur principale (hex)"
+                value={settings.primaryColor}
+                onChange={e => updateFlatSetting("primaryColor", e.target.value)}
+                placeholder="#4ade80"
+              />
+              <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+                <div style={{ width: 40, height: 40, background: settings.primaryColor, borderRadius: 8, border: `1px solid ${T.border}` }} />
+                <span style={{ fontSize: 11, color: T.textDim, alignSelf: "center" }}>Aperçu de la couleur</span>
+              </div>
+              
+              <Sel
+                label="Devise"
+                value={settings.currency}
+                onChange={e => updateFlatSetting("currency", e.target.value)}
+              >
+                <option value="CDF">Franc Congolais (CDF)</option>
+                <option value="GNF">Franc Guinéen (GNF)</option>
+                <option value="USD">Dollar US (USD)</option>
+                <option value="EUR">Euro (EUR)</option>
+              </Sel>
+              
+              <Sel
+                label="Fuseau horaire"
+                value={settings.timezone}
+                onChange={e => updateFlatSetting("timezone", e.target.value)}
+              >
+                <option value="Africa/Kinshasa">Kinshasa (UTC+1)</option>
+                <option value="Africa/Lubumbashi">Lubumbashi (UTC+2)</option>
+                <option value="Africa/Conakry">Conakry (UTC+0)</option>
+                <option value="Europe/Paris">Paris (UTC+1/UTC+2)</option>
+              </Sel>
+              
+              <div style={{ marginTop: 12, padding: "10px 12px", background: T.surface2, borderRadius: 8, border: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: 11, color: T.textDim }}>ℹ️ Logo personnalisé (fonctionnalité à venir)</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* B. PARAMÈTRES DES TARIFS */}
+        {activeTab === "prices" && (
+          <div>
+            <div style={S.cardHead}>
+              <span style={S.cardTitle}>💰 Tarifs des abonnements</span>
+            </div>
+            <div style={{ padding: "18px" }}>
+              <div style={{ fontSize: 12, color: T.textMid, marginBottom: 14 }}>Modifiez les prix des formules d'abonnement</div>
+              <Inp
+                label="Mensuel Illimité"
+                type="number"
+                value={tempSubscriptionPrices.mensuel}
+                onChange={e => setTempSubscriptionPrices(prev => ({ ...prev, mensuel: parseInt(e.target.value) || 0 }))}
+              />
+              <Inp
+                label="16 Séances / Mois"
+                type="number"
+                value={tempSubscriptionPrices.seances16}
+                onChange={e => setTempSubscriptionPrices(prev => ({ ...prev, seances16: parseInt(e.target.value) || 0 }))}
+              />
+              <Inp
+                label="12 Séances / Mois"
+                type="number"
+                value={tempSubscriptionPrices.seances12}
+                onChange={e => setTempSubscriptionPrices(prev => ({ ...prev, seances12: parseInt(e.target.value) || 0 }))}
+              />
+            </div>
+
+            <div style={{ ...S.cardHead, marginTop: 8 }}>
+              <span style={S.cardTitle}>💵 Tarifs des séances directes</span>
+            </div>
+            <div style={{ padding: "18px" }}>
+              <Inp
+                label="Sans coach — 1h"
+                type="number"
+                value={tempSessionPrices.no_coach_1h}
+                onChange={e => setTempSessionPrices(prev => ({ ...prev, no_coach_1h: parseInt(e.target.value) || 0 }))}
+              />
+              <Inp
+                label="Sans coach — 2h"
+                type="number"
+                value={tempSessionPrices.no_coach_2h}
+                onChange={e => setTempSessionPrices(prev => ({ ...prev, no_coach_2h: parseInt(e.target.value) || 0 }))}
+              />
+              <Inp
+                label="Avec coach — 1h"
+                type="number"
+                value={tempSessionPrices.with_coach_1h}
+                onChange={e => setTempSessionPrices(prev => ({ ...prev, with_coach_1h: parseInt(e.target.value) || 0 }))}
+              />
+              <Inp
+                label="Avec coach — 1h30"
+                type="number"
+                value={tempSessionPrices.with_coach_1h30}
+                onChange={e => setTempSessionPrices(prev => ({ ...prev, with_coach_1h30: parseInt(e.target.value) || 0 }))}
+              />
+              <Inp
+                label="Avec coach — 2h"
+                type="number"
+                value={tempSessionPrices.with_coach_2h}
+                onChange={e => setTempSessionPrices(prev => ({ ...prev, with_coach_2h: parseInt(e.target.value) || 0 }))}
+              />
+              
+              <button
+                style={{ ...S.btn("primary"), width: "100%", justifyContent: "center", marginTop: 12, padding: "10px" }}
+                onClick={handleSavePrices}
+                disabled={savingPrices}
+              >
+                {savingPrices ? "💾 Enregistrement..." : "💾 Enregistrer tous les tarifs"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* C. PARAMÈTRES DES NOTIFICATIONS */}
+        {activeTab === "notifications" && (
+          <div>
+            <div style={S.cardHead}>
+              <span style={S.cardTitle}>📱 Notifications WhatsApp</span>
+            </div>
+            <div style={{ padding: "18px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                <span style={{ fontSize: 13, color: T.text }}>Activer les notifications</span>
+                <span
+                  style={{
+                    ...S.fPill(settings.enableNotifications),
+                    padding: "5px 14px",
+                    cursor: "pointer",
+                  }}
+                  onClick={() => updateFlatSetting("enableNotifications", !settings.enableNotifications)}
+                >
+                  {settings.enableNotifications ? "✅ Activé" : "⛔ Désactivé"}
+                </span>
+              </div>
+              
+              <Inp
+                label="Délai d'alerte (jours avant expiration)"
+                type="number"
+                min="1"
+                max="30"
+                value={settings.alertDaysBefore}
+                onChange={e => updateFlatSetting("alertDaysBefore", parseInt(e.target.value) || 3)}
+              />
+              
+              <Field label="Message WhatsApp personnalisé">
+                <textarea
+                  style={{ ...S.input, minHeight: 100, fontFamily: "monospace", fontSize: 11 }}
+                  value={settings.whatsappMessage}
+                  onChange={e => updateFlatSetting("whatsappMessage", e.target.value)}
+                  placeholder="Bonjour {name}, votre abonnement {status}..."
+                />
+                <div style={{ fontSize: 10, color: T.textFaint, marginTop: 5 }}>
+                  Variables disponibles : {'{name}'} = nom du client, {'{status}'} = "expire bientôt" ou "est expiré"
+                </div>
+              </Field>
+            </div>
+          </div>
+        )}
+
+        {/* E. PARAMÈTRES DES SÉANCES */}
+        {activeTab === "sessions" && (
+          <div>
+            <div style={S.cardHead}>
+              <span style={S.cardTitle}>⏱️ Configuration des séances</span>
+            </div>
+            <div style={{ padding: "18px" }}>
+              <Inp
+                label="Durée maximale membre (minutes)"
+                type="number"
+                min="30"
+                max="240"
+                value={settings.memberSessionDuration}
+                onChange={e => updateFlatSetting("memberSessionDuration", parseInt(e.target.value) || 120)}
+              />
+              <Inp
+                label="Durée par défaut visiteur (minutes)"
+                type="number"
+                min="30"
+                max="180"
+                value={settings.visitorDefaultDuration}
+                onChange={e => updateFlatSetting("visitorDefaultDuration", parseInt(e.target.value) || 60)}
+              />
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12 }}>
+                <span style={{ fontSize: 13, color: T.text }}>Gratuité pour les membres</span>
+                <span
+                  style={{
+                    ...S.fPill(settings.memberFree),
+                    padding: "5px 14px",
+                    cursor: "pointer",
+                  }}
+                  onClick={() => updateFlatSetting("memberFree", !settings.memberFree)}
+                >
+                  {settings.memberFree ? "✅ Gratuit" : "💰 Payant"}
+                </span>
+              </div>
+              
+              <div style={{ marginTop: 16, padding: "10px 12px", background: T.surface2, borderRadius: 8, border: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: 11, color: T.textDim }}>
+                  ℹ️ Ces paramètres affectent la durée des séances et les règles de facturation.
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// 19-C. MODIFICATION DE LA VUE PARAMÈTRES (on conserve l'existant + ajout)
+// ═══════════════════════════════════════════════════════════════════
+
+// On remplace la fonction ParametresView existante par une version enrichie
+// Pour éviter les conflits, on redéfinit la fonction avec un nom différent
+// et on modifie l'export dans App
+
+function ParametresViewV2() {
+  const { role } = useAuth();
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  if (role !== "admin") {
+    return (
+      <div>
+        <h1 style={S.pageTitle}>Paramètres</h1>
+        <div style={{ ...S.card, padding: "40px 24px", textAlign: "center" }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
+          <div style={{ fontWeight: 700, color: T.textMid }}>Accès réservé à l'administrateur</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Bascule entre paramètres simples et avancés */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 20, alignItems: "center" }}>
+        <span
+          style={{
+            ...S.fPill(!showAdvanced),
+            padding: "8px 20px",
+            fontSize: 13,
+            cursor: "pointer",
+          }}
+          onClick={() => setShowAdvanced(false)}
+        >
+          🔑 Mots de passe
+        </span>
+        <span
+          style={{
+            ...S.fPill(showAdvanced),
+            padding: "8px 20px",
+            fontSize: 13,
+            cursor: "pointer",
+          }}
+          onClick={() => setShowAdvanced(true)}
+        >
+          ⚙️ Paramètres avancés
+        </span>
+      </div>
+
+      {/* Affichage conditionnel */}
+      {!showAdvanced ? <ParametresView /> : <AdvancedSettingsView />}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// NOTE: Pour intégrer ces nouveaux paramètres, modifiez dans le composant App
+// le rendu de la vue "parametres" en remplaçant <ParametresView /> par <ParametresViewV2 />
+// 
+// Remplacer :
+// {view === "parametres" && user.role === "admin" && (
+//   <ParametresView />
+// )}
+// 
+// Par :
+// {view === "parametres" && user.role === "admin" && (
+//   <ParametresViewV2 />
+// )}
+// ═══════════════════════════════════════════════════════════════════
