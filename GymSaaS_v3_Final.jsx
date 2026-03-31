@@ -2027,77 +2027,65 @@ export default function App() {
   }, [abonnements, setAbonnements, showToast]);
 
 // ── HANDLERS SÉANCES ───────────────────────────────────────────
-const handleStartSeance = useCallback(async (data) => {
-  let finalClientId = data.client_id;
-  let finalNom = data.nom;
-
-  try {
-    // --- CAS 1 : C'est un VISITEUR DIRECT ---
-    if (!data.isMember) {
-      showToast("Patientez...", "Création du profil client...", "info");
-      
-      // On crée automatiquement le visiteur dans la liste des clients
-      const newClient = {
-        id: genId(),
-        nom: data.nom,
-        telephone: "", // À compléter plus tard si besoin
-        type: "Passagers",
-        date_inscription: new Date().toISOString(),
-        seances_restantes: 0
-      };
-
-      // Ajout local
-      setClients(prev => [newClient, ...prev]);
-      
-      // Envoi au Sheets pour enregistrement définitif du client
-      await apiPost("addClient", newClient);
-      finalClientId = newClient.id;
-    } 
-    
-    // --- CAS 2 : C'est un MEMBRE (Décompte séance) ---
-    else if (data.isMember && finalClientId) {
-      const client = clients.find(c => c.id === finalClientId);
-      const reste = Number(client?.seances_restantes) || 0;
-
-      if (reste <= 0) {
-        if (!confirm("Ce membre n'a plus de séances. Voulez-vous quand même lancer la séance ?")) return;
-      }
-
-      // Mise à jour locale immédiate du compteur du client
-      setClients(prev => prev.map(c => 
-        c.id === finalClientId 
-          ? { ...c, seances_restantes: Math.max(0, reste - 1) } 
-          : c
-      ));
-
-      // Notification au backend pour décompter dans le Sheets
-      apiPost("updateClient", { id: finalClientId, seances_restantes: Math.max(0, reste - 1) });
-    }
-
-    // --- LANCEMENT DE LA SÉANCE ---
-    const rate = SESSION_RATES[data.rateKey] || { durationMinutes: 120, price: 0 };
-    const newSeance = {
-      id: genId(),
-      client_id: finalClientId,
-      nom: finalNom,
-      debut: new Date().toISOString(),
-      durationMinutes: rate.durationMinutes,
-      price: rate.price,
-      isMember: data.isMember,
+  const handleStartSeance = useCallback(async (data) => {
+    const rate = data.isMember ? { price: 0, durationMinutes: 120 } : SESSION_RATES[data.rateKey];
+    const newId = genId();
+    const newSeance = { 
+      id: newId, 
+      nom: data.nom, 
+      isMember: data.isMember, 
+      price: rate.price, 
+      durationMinutes: rate.durationMinutes, 
+      debut: new Date().toISOString(), 
       type: data.rateKey || "membre",
       statut: "en_cours"
     };
 
-    setSeancesActives(prev => [newSeance, ...prev]);
-    showToast("Succès", `Séance lancée pour ${finalNom}`, "success");
-    
-    await apiPost("startSeance", newSeance);
+    // 1. Mise à jour de l'interface immédiatement
+    setSeancesActives(p => [newSeance, ...p]);
+    showToast("Séance démarrée", data.nom, "success");
 
-  } catch (error) {
-    console.error(error);
-    showToast("Erreur", "Impossible de démarrer la séance", "error");
-  }
-}, [clients, setClients, setSeancesActives, showToast]);
+    // 2. Enregistrement immédiat dans Google Sheets
+    try {
+      await apiPost("startSeance", newSeance);
+    } catch (err) {
+      console.error("Erreur lors de l'enregistrement de la séance:", err);
+      showToast("Erreur", "La séance n'a pas pu être synchronisée.", "error");
+    }
+  }, [setSeancesActives, showToast]);
+
+const handleEndSeance = useCallback(async (id, sessionData) => {
+    // On utilise sessionData s'il est fourni (beaucoup plus sûr après un rafraîchissement)
+    const s = sessionData || seancesActives.find(x => x.id === id);
+    if (!s) return;
+    
+    // 1. Disparaît de l'écran direct
+    setSeancesActives(p => p.filter(x => x.id !== id));
+    
+    // 2. Si c'est un VISITEUR (non membre), on encaisse obligatoirement l'argent !
+    if (!s.isMember && s.price > 0) {
+      const montant = Number(s.price);
+      const tempId = genId();
+      const desc = `Séance directe — ${s.nom} (${SESSION_RATES[s.type]?.label || s.type})`;
+      
+      // On met dans la caisse locale (Dashboard mis à jour)
+      setCaisse(p => [normalizeCaisse({ id: tempId, date: new Date().toISOString(), description: desc, montant: montant }), ...p]);
+      showToast("Séance terminée", `${fmtGNF(montant)} encaissé en caisse`, "success");
+      
+      // On envoie à Google Sheets
+      try {
+        const res = await apiPost("finishSeance", { id: s.id, nom: s.nom, type: s.type, debut: s.debut, fin: new Date().toISOString(), statut: "terminee", montant: montant, description: desc });
+        if (res?.txId) setCaisse(p => p.map(t => t.id === tempId ? { ...t, id: String(res.txId) } : t));
+      } catch {}
+    } 
+    // 3. Si c'est un MEMBRE (gratuit)
+    else {
+      showToast("Séance terminée", "Séance membre clôturée (0 GNF)", "info");
+      try { 
+        await apiPost("finishSeance", { id: s.id, nom: s.nom, type: "membre", debut: s.debut, fin: new Date().toISOString(), statut: "terminee" }); 
+      } catch {}
+    }
+  }, [seancesActives, setSeancesActives, setCaisse, showToast]);
   
   // ── RENDU ──────────────────────────────────────────────────────
   const authValue = { ...user };
