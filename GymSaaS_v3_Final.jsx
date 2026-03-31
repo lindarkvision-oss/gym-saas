@@ -1976,32 +1976,57 @@ export default function App() {
     try { await apiPost("checkIn", { id: aboId, seances_restantes: newRestantes }); } catch {}
   }, [abonnements, setAbonnements, showToast]);
 
-  // ── HANDLERS SÉANCES ───────────────────────────────────────────
-  const handleStartSeance = useCallback((data) => {
+// ── HANDLERS SÉANCES ───────────────────────────────────────────
+  const handleStartSeance = useCallback(async (data) => {
     const rate = data.isMember ? { price: 0, durationMinutes: 120 } : SESSION_RATES[data.rateKey];
-    setSeancesActives(p => [{ id: genId(), nom: data.nom, isMember: data.isMember, price: rate.price, durationMinutes: rate.durationMinutes, debut: new Date().toISOString(), type: data.rateKey || "membre" }, ...p]);
+    const newId = genId();
+    const newSeance = { 
+      id: newId, 
+      nom: data.nom, 
+      isMember: data.isMember, 
+      price: rate.price, 
+      durationMinutes: rate.durationMinutes, 
+      debut: new Date().toISOString(), 
+      type: data.rateKey || "membre",
+      statut: "en_cours"
+    };
+
+    // 1. Mise à jour de l'interface immédiatement
+    setSeancesActives(p => [newSeance, ...p]);
     showToast("Séance démarrée", data.nom, "success");
+
+    // 2. Enregistrement immédiat dans Google Sheets
+    try {
+      await apiPost("startSeance", newSeance);
+    } catch (err) {
+      console.error("Erreur lors de l'enregistrement de la séance:", err);
+      showToast("Erreur", "La séance n'a pas pu être synchronisée.", "error");
+    }
   }, [setSeancesActives, showToast]);
 
   const handleEndSeance = useCallback(async (id) => {
     const s = seancesActives.find(x => x.id === id);
     if (!s) return;
     setSeancesActives(p => p.filter(x => x.id !== id));
+    
     if (s.price > 0) {
       const tempId = genId();
       const desc = `Séance directe — ${s.nom} (${SESSION_RATES[s.type]?.label || s.type})`;
       setCaisse(p => [normalizeCaisse({ id: tempId, date: new Date().toISOString(), description: desc, montant: s.price }), ...p]);
       showToast("Séance terminée", `${fmtGNF(s.price)} encaissé`, "success");
       try {
-        const res = await apiPost("addSeance", { nom: s.nom, type: s.type, debut: s.debut, fin: new Date().toISOString(), statut: "terminee", montant: s.price, description: desc });
+        // Remplacement de "addSeance" par "finishSeance" avec l'ID
+        const res = await apiPost("finishSeance", { id: s.id, nom: s.nom, type: s.type, debut: s.debut, fin: new Date().toISOString(), statut: "terminee", montant: s.price, description: desc });
         if (res?.txId) setCaisse(p => p.map(t => t.id === tempId ? { ...t, id: String(res.txId) } : t));
       } catch {}
     } else {
       showToast("Séance terminée", "Séance membre clôturée", "info");
-      try { await apiPost("addSeance", { nom: s.nom, type: "membre", debut: s.debut, fin: new Date().toISOString(), statut: "terminee" }); } catch {}
+      try { 
+        // Remplacement de "addSeance" par "finishSeance" avec l'ID
+        await apiPost("finishSeance", { id: s.id, nom: s.nom, type: "membre", debut: s.debut, fin: new Date().toISOString(), statut: "terminee" }); 
+      } catch {}
     }
   }, [seancesActives, setSeancesActives, setCaisse, showToast]);
-
   // ── RENDU ──────────────────────────────────────────────────────
   const authValue = { ...user };
 
