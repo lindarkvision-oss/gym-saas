@@ -1350,11 +1350,17 @@ const AbonnementsView = memo(({ abonnements, clients, now, syncing, onAdd, onDel
 // 17. VUE SÉANCES DIRECTES
 // ═══════════════════════════════════════════════════════════════════
 
-const SeancesView = memo(({ seancesActives, clients, now, onStart, onEnd }) => {
+const SeancesView = memo(({ seancesActives, clients, onStart, onEnd }) => {
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState({ isMember: false, client_id: "", nom_visiteur: "", rateKey: "" });
   const [tick, setTick] = useState(0);
 
+  // TICK TOUTES LES SECONDES
+  useEffect(() => {
+    const t = setInterval(() => setTick(x => x + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  
 // Tick toutes les 1s pour mettre à jour les timers en direct
   useEffect(() => {
     const t = setInterval(() => setTick(x => x + 1), 1000);
