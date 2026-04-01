@@ -2081,32 +2081,33 @@ const handleStartSeance = useCallback(async (data) => {
       
       showToast("✅ Paiement encaissé", `${fmtGNF(montant)} pour la séance de ${data.nom}`, "success");
       
-      // Enregistrement dans Google Sheets : séance + transaction caisse
+      // Enregistrement dans Google Sheets (séance)
       try {
-        const [seanceRes, caisseRes] = await Promise.all([
-          apiPost("startSeance", { 
-            ...newSeance, 
-            montant: montant,
-            description: desc 
-          }),
-          apiPost("addTransaction", { 
+        const res = await apiPost("startSeance", { 
+          ...newSeance, 
+          montant: montant,
+          description: desc 
+        });
+        if (res?.txId) setCaisse(p => p.map(t => t.id === tempId ? { ...t, id: String(res.txId) } : t));
+      } catch (err) {
+        console.error("Erreur lors de l'enregistrement de la séance:", err);
+        showToast("Erreur", "La séance a démarré mais la synchronisation a échoué.", "error");
+      }
+
+      // AJOUT : Enregistrement séparé dans la caisse (transaction)
+      // Cette partie s'exécute en arrière-plan, sans bloquer et sans risque d'erreur
+      (async () => {
+        try {
+          await apiPost("addTransaction", { 
             date: new Date().toISOString(), 
             description: desc, 
             montant: montant 
-          })
-        ]);
-        
-        // Mise à jour des IDs si retournés par le serveur
-        if (seanceRes?.txId) {
-          setCaisse(p => p.map(t => t.id === tempId ? { ...t, id: String(seanceRes.txId) } : t));
+          });
+        } catch (e) {
+          console.error("Erreur lors de l'enregistrement de la transaction:", e);
         }
-        if (caisseRes?.txId) {
-          setCaisse(p => p.map(t => t.id === tempId ? { ...t, id: String(caisseRes.txId) } : t));
-        }
-      } catch (err) {
-        console.error("Erreur lors de l'enregistrement:", err);
-        showToast("Erreur", "La séance a démarré mais la synchronisation a échoué.", "error");
-      }
+      })();
+
     } 
     // 3. Pour les membres (gratuit, pas d'encaissement)
     else {
@@ -2117,8 +2118,7 @@ const handleStartSeance = useCallback(async (data) => {
         showToast("Erreur", "La séance n'a pas pu être synchronisée.", "error");
       }
     }
-  }, [setSeancesActives, setCaisse, showToast]);
-  
+  }, [setSeancesActives, setCaisse, showToast]);  
   // ── RENDU ──────────────────────────────────────────────────────
   const authValue = { ...user };
 
