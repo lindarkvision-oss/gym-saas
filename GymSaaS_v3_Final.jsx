@@ -2729,4 +2729,306 @@ function ParametresViewV2() {
 // {view === "parametres" && user.role === "admin" && (
 //   <ParametresViewV2 />
 // )}
+// ============================================================
+// RESPONSIVE MOBILE - À AJOUTER À LA FIN DU FICHIER
+// ============================================================
+
+// Ajout automatique du menu mobile sans modifier le code existant
+(function setupMobileMenu() {
+  // Attendre que le DOM soit chargé
+  setTimeout(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      /* Menu mobile - apparaît uniquement sur petits écrans */
+      @media (max-width: 768px) {
+        /* Masquer la sidebar desktop */
+        aside[style*="width: 230px"] {
+          display: none !important;
+        }
+        
+        /* Créer un header mobile */
+        .mobile-header {
+          position: sticky;
+          top: 0;
+          background: #111111;
+          padding: 12px 16px;
+          border-bottom: 1px solid #1e1e1e;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          z-index: 100;
+        }
+        
+        .menu-btn {
+          background: none;
+          border: none;
+          color: #e8e8e8;
+          font-size: 24px;
+          cursor: pointer;
+          width: 40px;
+          height: 40px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 8px;
+        }
+        
+        .menu-btn:hover {
+          background: #1a1a1a;
+        }
+        
+        .mobile-logo {
+          flex: 1;
+          text-align: center;
+        }
+        
+        .mobile-logo .logo-sub {
+          font-size: 9px;
+          letter-spacing: 0.2em;
+          color: #555;
+          text-transform: uppercase;
+        }
+        
+        .mobile-logo .logo-main {
+          font-size: 16px;
+          font-weight: 900;
+          color: #fff;
+          line-height: 1.2;
+        }
+        
+        .mobile-logo .logo-accent {
+          color: #4ade80;
+        }
+        
+        /* Tiroir du menu */
+        .mobile-drawer {
+          position: fixed;
+          top: 0;
+          left: 0;
+          bottom: 0;
+          width: 280px;
+          background: #111111;
+          transform: translateX(-100%);
+          transition: transform 0.25s ease;
+          z-index: 1001;
+          display: flex;
+          flex-direction: column;
+          box-shadow: 2px 0 20px rgba(0,0,0,0.5);
+        }
+        
+        .mobile-drawer.open {
+          transform: translateX(0);
+        }
+        
+        .drawer-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0,0,0,0.7);
+          z-index: 1000;
+          display: none;
+        }
+        
+        .drawer-overlay.open {
+          display: block;
+        }
+        
+        .drawer-header {
+          padding: 20px;
+          border-bottom: 1px solid #1e1e1e;
+        }
+        
+        .drawer-nav {
+          flex: 1;
+          padding: 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        
+        .drawer-nav-item {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 9px 12px;
+          border-radius: 9px;
+          cursor: pointer;
+          font-size: 13px;
+          color: #888;
+          transition: all 0.1s;
+        }
+        
+        .drawer-nav-item.active {
+          background: #1a1a1a;
+          color: #4ade80;
+          border: 1px solid #252525;
+          font-weight: 600;
+        }
+        
+        .drawer-nav-icon {
+          width: 16px;
+          text-align: center;
+          flex-shrink: 0;
+          font-size: 14px;
+        }
+        
+        .drawer-badge {
+          margin-left: auto;
+          background: #2d0d0d;
+          color: #f87171;
+          border: 1px solid #4d1a1a;
+          border-radius: 10px;
+          font-size: 9px;
+          font-weight: 800;
+          padding: 1px 6px;
+        }
+        
+        .drawer-footer {
+          padding: 12px 10px 14px;
+          border-top: 1px solid #1e1e1e;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+        
+        /* Ajustements pour les tables sur mobile */
+        .table-responsive {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+        
+        table {
+          min-width: 600px;
+        }
+        
+        /* Ajustement des grilles */
+        .kpi-grid {
+          grid-template-columns: 1fr 1fr !important;
+          gap: 10px !important;
+        }
+        
+        .grid2, .grid3 {
+          grid-template-columns: 1fr !important;
+        }
+        
+        .main-inner {
+          padding: 16px !important;
+        }
+        
+        /* Ajustement des cartes */
+        .card-head {
+          flex-wrap: wrap;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // Création du header mobile et du menu
+    const mainElement = document.querySelector('main');
+    if (mainElement && !document.querySelector('.mobile-header')) {
+      // Récupérer les infos de navigation
+      const navItems = [];
+      document.querySelectorAll('aside nav > div').forEach(el => {
+        const icon = el.querySelector('span:first-child')?.innerText || '';
+        const label = el.childNodes[1]?.textContent || '';
+        const hasBadge = !!el.querySelector('span:last-child');
+        navItems.push({ icon, label, hasBadge });
+      });
+      
+      // Créer le header mobile
+      const header = document.createElement('div');
+      header.className = 'mobile-header';
+      header.innerHTML = `
+        <button class="menu-btn">☰</button>
+        <div class="mobile-logo">
+          <div class="logo-sub">Gym Management</div>
+          <div class="logo-main">NOUVEL <span class="logo-accent">ÉLAN</span></div>
+        </div>
+      `;
+      
+      // Créer l'overlay
+      const overlay = document.createElement('div');
+      overlay.className = 'drawer-overlay';
+      
+      // Créer le tiroir
+      const drawer = document.createElement('div');
+      drawer.className = 'mobile-drawer';
+      drawer.innerHTML = `
+        <div class="drawer-header">
+          <div class="logo-sub">Gym Management</div>
+          <div class="logo-main">NOUVEL <span class="logo-accent">ÉLAN</span></div>
+          <div class="logo-version" style="font-size:9px;color:#333;margin-top:4px;">v2.1.0</div>
+        </div>
+        <div class="drawer-nav"></div>
+        <div class="drawer-footer"></div>
+      `;
+      
+      // Remplir la navigation
+      const navContainer = drawer.querySelector('.drawer-nav');
+      navItems.forEach((item, idx) => {
+        const navDiv = document.createElement('div');
+        navDiv.className = 'drawer-nav-item';
+        if (window.location.hash === `#${idx}`) navDiv.classList.add('active');
+        navDiv.innerHTML = `
+          <span class="drawer-nav-icon">${item.icon}</span>
+          ${item.label}
+          ${item.hasBadge ? '<span class="drawer-badge">!</span>' : ''}
+        `;
+        navDiv.onclick = () => {
+          const sidebarItems = document.querySelectorAll('aside nav > div');
+          if (sidebarItems[idx]) sidebarItems[idx].click();
+          drawer.classList.remove('open');
+          overlay.classList.remove('open');
+        };
+        navContainer.appendChild(navDiv);
+      });
+      
+      // Remplir le footer avec le contenu de la sidebar
+      const footerSidebar = document.querySelector('aside > div:last-child');
+      if (footerSidebar) {
+        const drawerFooter = drawer.querySelector('.drawer-footer');
+        drawerFooter.innerHTML = footerSidebar.innerHTML;
+        // Adapter les styles du footer
+        drawerFooter.querySelectorAll('button').forEach(btn => {
+          if (btn.innerText.includes('Rafraîchir')) {
+            btn.onclick = () => {
+              const refreshBtn = document.querySelector('aside button');
+              if (refreshBtn) refreshBtn.click();
+              drawer.classList.remove('open');
+              overlay.classList.remove('open');
+            };
+          }
+        });
+      }
+      
+      // Gestion de l'ouverture/fermeture
+      const menuBtn = header.querySelector('.menu-btn');
+      menuBtn.onclick = () => {
+        drawer.classList.add('open');
+        overlay.classList.add('open');
+      };
+      overlay.onclick = () => {
+        drawer.classList.remove('open');
+        overlay.classList.remove('open');
+      };
+      
+      // Insérer avant main
+      mainElement.parentNode.insertBefore(header, mainElement);
+      document.body.appendChild(overlay);
+      document.body.appendChild(drawer);
+      
+      // Encapsuler les tables pour le défilement horizontal
+      document.querySelectorAll('table').forEach(table => {
+        if (!table.parentElement.classList.contains('table-responsive')) {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'table-responsive';
+          table.parentNode.insertBefore(wrapper, table);
+          wrapper.appendChild(table);
+        }
+      });
+    }
+  }, 100);
+})();
 // ═══════════════════════════════════════════════════════════════════
