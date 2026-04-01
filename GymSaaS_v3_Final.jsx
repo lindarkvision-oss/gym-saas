@@ -2071,7 +2071,7 @@ const handleStartSeance = useCallback(async (data) => {
       const tempId = genId();
       const desc = `Séance directe — ${data.nom} (${SESSION_RATES[data.rateKey]?.label || data.rateKey})`;
       
-      // On met dans la caisse locale (Dashboard mis à jour IMMÉDIATEMENT)
+      // On met dans la caisse locale
       setCaisse(p => [normalizeCaisse({ 
         id: tempId, 
         date: new Date().toISOString(), 
@@ -2081,22 +2081,27 @@ const handleStartSeance = useCallback(async (data) => {
       
       showToast("✅ Paiement encaissé", `${fmtGNF(montant)} pour la séance de ${data.nom}`, "success");
       
-      // Enregistrement dans Google Sheets : on sépare la séance et la caisse
       try {
-        // A. On enregistre la séance
+        // A. Enregistrement de la séance
         await apiPost("startSeance", newSeance);
         
-        // B. On enregistre la transaction dans la caisse (en utilisant ton action "addTransaction" existante dans le script)
+        // B. PAUSE de sécurité (800ms) pour éviter le conflit d'écriture sur Google Sheets
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        // C. Enregistrement de la transaction dans l'onglet "caisse"
         const resTx = await apiPost("addTransaction", {
           date: new Date().toISOString(),
           description: desc,
           montant: montant
         });
         
-        if (resTx?.txId) setCaisse(p => p.map(t => t.id === tempId ? { ...t, id: String(resTx.txId) } : t));
+        // Mise à jour de l'ID temporaire par l'ID réel retourné par Sheets
+        if (resTx?.txId) {
+          setCaisse(p => p.map(t => t.id === tempId ? { ...t, id: String(resTx.txId) } : t));
+        }
       } catch (err) {
-        console.error("Erreur lors de l'enregistrement de la séance:", err);
-        showToast("Erreur", "La séance a démarré mais la synchronisation a échoué.", "error");
+        console.error("Erreur lors de la synchronisation:", err);
+        showToast("Erreur de synchronisation", "Vérifiez votre connexion ou l'onglet Caisse sur Sheets.", "error");
       }
     } 
     // 3. Pour les membres (gratuit, pas d'encaissement)
@@ -2111,17 +2116,13 @@ const handleStartSeance = useCallback(async (data) => {
   }, [setSeancesActives, setCaisse, showToast]);
   
 const handleEndSeance = useCallback(async (id, sessionData) => {
-    // On utilise sessionData s'il est fourni (beaucoup plus sûr après un rafraîchissement)
     const s = sessionData || seancesActives.find(x => x.id === id);
     if (!s) return;
     
-    // 1. Disparaît de l'écran direct
     setSeancesActives(p => p.filter(x => x.id !== id));
     
-    // 2. Simple notification de fin (sans encaissement car déjà fait au démarrage)
     if (!s.isMember) {
       showToast("Séance terminée", `${s.nom} a terminé sa séance`, "success");
-      // On envoie juste la fin à Google Sheets sans encaissement
       try { 
         await apiPost("finishSeance", { 
           id: s.id, 
@@ -2130,13 +2131,11 @@ const handleEndSeance = useCallback(async (id, sessionData) => {
           debut: s.debut, 
           fin: new Date().toISOString(), 
           statut: "terminee",
-          montant: 0,  // Pas d'encaissement supplémentaire
-          description: `Séance terminée — ${s.nom} (déjà encaissée au démarrage)`
+          montant: 0, // Très important : on envoie 0 pour ne pas créer de doublon en caisse
+          description: `Séance terminée — ${s.nom}`
         }); 
       } catch {}
-    } 
-    // 3. Si c'est un MEMBRE (gratuit, toujours pas d'encaissement)
-    else {
+    } else {
       showToast("Séance terminée", "Séance membre clôturée (gratuit)", "info");
       try { 
         await apiPost("finishSeance", { 
