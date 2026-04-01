@@ -116,51 +116,6 @@ const SESSION_RATES = {
 
 const OBJECTIFS = ["Perte de poids", "Prise de masse", "Entretien / Santé", "Cardio", "Préparation sportive"];
 const COLORS = ["#4ade80", "#60a5fa", "#f472b6", "#fb923c", "#a78bfa", "#34d399", "#fbbf24", "#e879f9"];
-// ═══════════════════════════════════════════════════════════════════
-// FONCTION D'APPLICATION DES PARAMÈTRES (sera utilisée plus tard)
-// ═══════════════════════════════════════════════════════════════════
-function applySettingsToApp(settings) {
-  if (!settings) return;
-  
-  // Appliquer la devise pour l'affichage des montants
-  if (settings.currency) {
-    window.__CURRENCY = settings.currency;
-  }
-  
-  // Appliquer les prix des abonnements
-  if (settings.subscriptionPrices && window.SUB_TYPES) {
-    if (window.SUB_TYPES.mensuel) window.SUB_TYPES.mensuel.price = settings.subscriptionPrices.mensuel;
-    if (window.SUB_TYPES.seances16) window.SUB_TYPES.seances16.price = settings.subscriptionPrices.seances16;
-    if (window.SUB_TYPES.seances12) window.SUB_TYPES.seances12.price = settings.subscriptionPrices.seances12;
-  }
-  
-  // Appliquer les prix des séances
-  if (settings.sessionPrices && window.SESSION_RATES) {
-    if (window.SESSION_RATES.no_coach_1h) window.SESSION_RATES.no_coach_1h.price = settings.sessionPrices.no_coach_1h;
-    if (window.SESSION_RATES.no_coach_2h) window.SESSION_RATES.no_coach_2h.price = settings.sessionPrices.no_coach_2h;
-    if (window.SESSION_RATES.with_coach_1h) window.SESSION_RATES.with_coach_1h.price = settings.sessionPrices.with_coach_1h;
-    if (window.SESSION_RATES.with_coach_1h30) window.SESSION_RATES.with_coach_1h30.price = settings.sessionPrices.with_coach_1h30;
-    if (window.SESSION_RATES.with_coach_2h) window.SESSION_RATES.with_coach_2h.price = settings.sessionPrices.with_coach_2h;
-  }
-  
-  // Appliquer le délai d'alerte (3 jours par défaut)
-  if (settings.alertDaysBefore !== undefined) {
-    window.__ALERT_DAYS_BEFORE = settings.alertDaysBefore;
-  }
-  
-  // Appliquer les durées des séances
-  if (settings.memberSessionDuration) {
-    window.__MEMBER_SESSION_DURATION = settings.memberSessionDuration;
-  }
-  if (settings.visitorDefaultDuration) {
-    window.__VISITOR_DEFAULT_DURATION = settings.visitorDefaultDuration;
-  }
-  
-  // Appliquer le message WhatsApp
-  if (settings.whatsappMessage) {
-    window.__WHATSAPP_TEMPLATE = settings.whatsappMessage;
-  }
-}
 
 // ═══════════════════════════════════════════════════════════════════
 // 3. SESSION
@@ -239,14 +194,9 @@ const cache = {
 // 5. UTILS
 // ═══════════════════════════════════════════════════════════════════
 
-const fmtGNF = (n) => {
-  const currency = window.__CURRENCY || "CDF";
-  return new Intl.NumberFormat("fr-FR", { 
-    style: "currency", 
-    currency: currency, 
-    minimumFractionDigits: 0 
-  }).format(Number(n) || 0);
-};
+const fmtGNF = (n) =>
+  new Intl.NumberFormat("fr-GN", { style: "currency", currency: "CDF", minimumFractionDigits: 0 })
+    .format(Number(n) || 0);
 
 const fmtDate = (d) => {
   if (!d) return "—";
@@ -322,11 +272,10 @@ const getSubStatus = (fin, now) => {
   if (!fin) return "expired";
   const d = diffDays(new Date(fin), now);
   if (d < 0) return "expired";
-  // Utiliser le délai configuré (par défaut 3 jours)
-  const alertDays = window.__ALERT_DAYS_BEFORE !== undefined ? window.__ALERT_DAYS_BEFORE : 3;
-  if (d <= alertDays) return "expiring";
+  if (d <= 3) return "expiring";
   return "active";
 };
+
 const getClientSubStatus = (clientId, abonnements, now) => {
   const list = abonnements
     .filter(a => a.client_id === String(clientId))
@@ -2253,60 +2202,80 @@ const GLOBAL_CSS = `
 
 // Hook pour la gestion des paramètres globaux (localStorage)
 function useSettings() {
-const [settings, setSettings] = useState(() => {
-  try {
-    const saved = localStorage.getItem("gym_advanced_settings");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      setTimeout(() => applySettingsToApp(parsed), 100);
-      return parsed;
-    }
-  } catch {}
-  return {
-    gymName: "Gym Nouvel Élan",
-    primaryColor: "#4ade80",
-    currency: "CDF",
-    timezone: "Africa/Kinshasa",
-    logoUrl: "",
-    subscriptionPrices: { mensuel: 115000, seances16: 80500, seances12: 57500 },
-    sessionPrices: { no_coach_1h: 4500, no_coach_2h: 7500, with_coach_1h: 6500, with_coach_1h30: 8000, with_coach_2h: 10000 },
-    whatsappMessage: "Bonjour {name}, votre abonnement {status}. Venez renouveler au Gym Nouvel Élan 💪",
-    alertDaysBefore: 3,
-    enableNotifications: true,
-    memberSessionDuration: 120,
-    visitorDefaultDuration: 60,
-    memberFree: true,
-  };
-});
-const updateFlatSetting = useCallback((key, value) => {
-  setSettings(prev => {
-    const updated = { ...prev, [key]: value };
-    localStorage.setItem("gym_advanced_settings", JSON.stringify(updated));
-    applySettingsToApp(updated);  // 👈 AJOUTER CETTE LIGNE
-    return updated;
+  const [settings, setSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem("gym_advanced_settings");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      // A. Paramètres généraux
+      gymName: "Gym Nouvel Élan",
+      primaryColor: "#4ade80",
+      currency: "CDF",
+      timezone: "Africa/Kinshasa",
+      logoUrl: "",
+      
+      // B. Paramètres des tarifs (abonnements)
+      subscriptionPrices: {
+        mensuel: 115000,
+        seances16: 80500,
+        seances12: 57500,
+      },
+      sessionPrices: {
+        no_coach_1h: 4500,
+        no_coach_2h: 7500,
+        with_coach_1h: 6500,
+        with_coach_1h30: 8000,
+        with_coach_2h: 10000,
+      },
+      
+      // C. Paramètres des notifications
+      whatsappMessage: "Bonjour {name}, votre abonnement {status}. Venez renouveler au Gym Nouvel Élan 💪",
+      alertDaysBefore: 3,
+      enableNotifications: true,
+      
+      // E. Paramètres des séances
+      memberSessionDuration: 120,
+      visitorDefaultDuration: 60,
+      memberFree: true,
+    };
   });
-}, []);
 
-const resetToDefaults = useCallback(() => {
-  const defaults = {
-    gymName: "Gym Nouvel Élan",
-    primaryColor: "#4ade80",
-    currency: "CDF",
-    timezone: "Africa/Kinshasa",
-    logoUrl: "",
-    subscriptionPrices: { mensuel: 115000, seances16: 80500, seances12: 57500 },
-    sessionPrices: { no_coach_1h: 4500, no_coach_2h: 7500, with_coach_1h: 6500, with_coach_1h30: 8000, with_coach_2h: 10000 },
-    whatsappMessage: "Bonjour {name}, votre abonnement {status}. Venez renouveler au Gym Nouvel Élan 💪",
-    alertDaysBefore: 3,
-    enableNotifications: true,
-    memberSessionDuration: 120,
-    visitorDefaultDuration: 60,
-    memberFree: true,
-  };
-  localStorage.setItem("gym_advanced_settings", JSON.stringify(defaults));
-  setSettings(defaults);
-  applySettingsToApp(defaults);  // 👈 AJOUTER CETTE LIGNE
-}, []);
+  const updateSetting = useCallback((category, key, value) => {
+    setSettings(prev => {
+      const updated = { ...prev, [category]: { ...prev[category], [key]: value } };
+      localStorage.setItem("gym_advanced_settings", JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  const updateFlatSetting = useCallback((key, value) => {
+    setSettings(prev => {
+      const updated = { ...prev, [key]: value };
+      localStorage.setItem("gym_advanced_settings", JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  const resetToDefaults = useCallback(() => {
+    const defaults = {
+      gymName: "Gym Nouvel Élan",
+      primaryColor: "#4ade80",
+      currency: "CDF",
+      timezone: "Africa/Kinshasa",
+      logoUrl: "",
+      subscriptionPrices: { mensuel: 115000, seances16: 80500, seances12: 57500 },
+      sessionPrices: { no_coach_1h: 4500, no_coach_2h: 7500, with_coach_1h: 6500, with_coach_1h30: 8000, with_coach_2h: 10000 },
+      whatsappMessage: "Bonjour {name}, votre abonnement {status}. Venez renouveler au Gym Nouvel Élan 💪",
+      alertDaysBefore: 3,
+      enableNotifications: true,
+      memberSessionDuration: 120,
+      visitorDefaultDuration: 60,
+      memberFree: true,
+    };
+    localStorage.setItem("gym_advanced_settings", JSON.stringify(defaults));
+    setSettings(defaults);
+  }, []);
 
   return { settings, updateSetting, updateFlatSetting, resetToDefaults };
 }
