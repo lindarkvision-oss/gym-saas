@@ -2081,14 +2081,19 @@ const handleStartSeance = useCallback(async (data) => {
       
       showToast("✅ Paiement encaissé", `${fmtGNF(montant)} pour la séance de ${data.nom}`, "success");
       
-      // Enregistrement dans Google Sheets avec l'encaissement
+      // Enregistrement dans Google Sheets : on sépare la séance et la caisse
       try {
-        const res = await apiPost("startSeance", { 
-          ...newSeance, 
-          montant: montant,
-          description: desc 
+        // A. On enregistre la séance
+        await apiPost("startSeance", newSeance);
+        
+        // B. On enregistre la transaction dans la caisse (en utilisant ton action "addTransaction" existante dans le script)
+        const resTx = await apiPost("addTransaction", {
+          date: new Date().toISOString(),
+          description: desc,
+          montant: montant
         });
-        if (res?.txId) setCaisse(p => p.map(t => t.id === tempId ? { ...t, id: String(res.txId) } : t));
+        
+        if (resTx?.txId) setCaisse(p => p.map(t => t.id === tempId ? { ...t, id: String(resTx.txId) } : t));
       } catch (err) {
         console.error("Erreur lors de l'enregistrement de la séance:", err);
         showToast("Erreur", "La séance a démarré mais la synchronisation a échoué.", "error");
