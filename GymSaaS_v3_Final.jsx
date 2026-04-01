@@ -1369,19 +1369,28 @@ const SeancesView = memo(({ seancesActives, clients, onStart, onEnd }) => {
     return () => clearInterval(interval);
   }, []);
 
-  const handleStart = () => {
-    if (!form.isMember && !form.rateKey) return;
-    const client = form.isMember ? clients.find(c => c.id === form.client_id) : null;
-    onStart({
-      isMember: form.isMember,
-      client_id: form.isMember ? form.client_id : null,
-      nom: client ? client.nom : form.nom_visiteur || "Visiteur",
-      rateKey: form.rateKey,
-    });
-    setForm({ isMember: false, client_id: "", nom_visiteur: "", rateKey: "" });
-    setModal(false);
-  };
-
+const handleStart = () => {
+  // Validation pour le membre
+  if (form.isMember && !form.client_id) {
+    showToast("Sélection requise", "Veuillez choisir un membre", "error");
+    return;
+  }
+  // Validation pour le visiteur
+  if (!form.isMember && !form.rateKey) {
+    showToast("Sélection requise", "Veuillez choisir un tarif", "error");
+    return;
+  }
+  const client = form.isMember ? clients.find(c => c.id === form.client_id) : null;
+  onStart({
+    isMember: form.isMember,
+    client_id: form.isMember ? form.client_id : null,
+    nom: client ? client.nom : form.nom_visiteur || "Visiteur",
+    rateKey: form.rateKey,
+  });
+  setForm({ isMember: false, client_id: "", nom_visiteur: "", rateKey: "" });
+  setModal(false);
+};
+  
   const selectedRate = SESSION_RATES[form.rateKey];
 
   return (
@@ -1442,73 +1451,84 @@ const SeancesView = memo(({ seancesActives, clients, onStart, onEnd }) => {
         </div>
       )}
 
-      <Modal open={modal} onClose={() => setModal(false)} title="Démarrer une séance">
-        <div style={{ display: "flex", gap: 7, marginBottom: 18 }}>
-          {["Visiteur direct", "Membre abonné"].map((label, i) => (
-            <span key={label} style={{ ...S.fPill(form.isMember === (i === 1)), flex: 1, justifyContent: "center", display: "flex" }}
-              onClick={() => setForm({ ...form, isMember: i === 1, client_id: "", rateKey: "" })}>
-              {label}
-            </span>
-          ))}
-        </div>
+<Modal open={modal} onClose={() => setModal(false)} title="Démarrer une séance">
+  <div style={{ display: "flex", gap: 7, marginBottom: 18 }}>
+    {["Visiteur direct", "Membre abonné"].map((label, i) => (
+      <span key={label} style={{ ...S.fPill(form.isMember === (i === 1)), flex: 1, justifyContent: "center", display: "flex" }}
+        onClick={() => setForm({ ...form, isMember: i === 1, client_id: "", rateKey: "" })}>
+        {label}
+      </span>
+    ))}
+  </div>
 
-{form.isMember ? (
-  <>
-    <Sel label="Membre" value={form.client_id} onChange={e => setForm({ ...form, client_id: e.target.value })}>
-      <option value="">Sélectionner un membre...</option>
-      {clients.map(c => (
-        <option key={c.id} value={c.id}>
-          {c.nom} {c.seances_restantes ? `(${c.seances_restantes} restantes)` : ""}
-        </option>
-      ))}
-    </Sel>
-    
-    {/* Affichage informatif si un membre est sélectionné */}
-    {form.client_id && (
-      <div style={{ background: T.surface2, padding: 12, borderRadius: 8, marginBottom: 15, border: `1px solid ${T.border}` }}>
-        {(() => {
-          const c = clients.find(x => x.id === form.client_id);
-          const reste = Number(c?.seances_restantes) || 0;
-          return (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 13, color: T.textDim }}>Crédit actuel :</span>
-              <span style={{ fontWeight: 800, color: reste > 0 ? T.green : T.red, fontSize: 16 }}>
-                {reste} séance{reste > 1 ? "s" : ""}
-              </span>
-            </div>
-          );
-        })()}
-      </div>
-    )}
-  </>
-) : (
-  <>
-    <Inp label="Nom du visiteur" value={form.nom_visiteur} onChange={e => setForm({ ...form, nom_visiteur: e.target.value })} placeholder="Ex: Jean Martin" />
-    <Sel label="Tarif" value={form.rateKey} onChange={e => setForm({ ...form, rateKey: e.target.value })}>
-      <option value="">Sélectionner un tarif...</option>
-      {Object.entries(SESSION_RATES).map(([k, v]) => (
-        <option key={k} value={k}>{v.label} — {fmtGNF(v.price)}</option>
-      ))}
-    </Sel>
-    {selectedRate && (
-      <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 13px", marginBottom: 14, fontSize: 12, color: T.textDim }}>
-        ⏱ Durée : <strong style={{ color: T.text }}>{selectedRate.durationMinutes} min</strong>
-        <span style={{ marginLeft: 12, color: T.green, fontWeight: 700 }}>💰 {fmtGNF(selectedRate.price)}</span>
-      </div>
-    )}
-  </>
-)}
-        <button
-          style={{ ...S.btn("orange"), width: "100%", justifyContent: "center", padding: 11 }}
-          onClick={handleStart}
-          disabled={!form.isMember && !form.rateKey}
-        >
-          ▶ Lancer le chronomètre
-        </button>
-      </Modal>
+  {form.isMember ? (
+    <>
+      <Sel label="Membre" value={form.client_id} onChange={e => setForm({ ...form, client_id: e.target.value })}>
+        <option value="">Sélectionner un membre...</option>
+        {clients.map(c => (
+          <option key={c.id} value={c.id}>
+            {c.nom} {c.seances_restantes ? `(${c.seances_restantes} restantes)` : ""}
+          </option>
+        ))}
+      </Sel>
+      
+      {/* Message d'erreur si aucun membre n'est sélectionné */}
+      {form.isMember && !form.client_id && (
+        <div style={{ marginTop: -8, marginBottom: 12, fontSize: 11, color: T.red }}>
+          ⚠ Veuillez sélectionner un membre
+        </div>
+      )}
+      
+      {/* Affichage informatif si un membre est sélectionné */}
+      {form.client_id && (
+        <div style={{ background: T.surface2, padding: 12, borderRadius: 8, marginBottom: 15, border: `1px solid ${T.border}` }}>
+          {(() => {
+            const c = clients.find(x => x.id === form.client_id);
+            const reste = Number(c?.seances_restantes) || 0;
+            return (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 13, color: T.textDim }}>Crédit actuel :</span>
+                <span style={{ fontWeight: 800, color: reste > 0 ? T.green : T.red, fontSize: 16 }}>
+                  {reste} séance{reste > 1 ? "s" : ""}
+                </span>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+    </>
+  ) : (
+    <>
+      <Inp label="Nom du visiteur" value={form.nom_visiteur} onChange={e => setForm({ ...form, nom_visiteur: e.target.value })} placeholder="Ex: Jean Martin" />
+      <Sel label="Tarif" value={form.rateKey} onChange={e => setForm({ ...form, rateKey: e.target.value })}>
+        <option value="">Sélectionner un tarif...</option>
+        {Object.entries(SESSION_RATES).map(([k, v]) => (
+          <option key={k} value={k}>{v.label} — {fmtGNF(v.price)}</option>
+        ))}
+      </Sel>
+      {selectedRate && (
+        <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 13px", marginBottom: 14, fontSize: 12, color: T.textDim }}>
+          ⏱ Durée : <strong style={{ color: T.text }}>{selectedRate.durationMinutes} min</strong>
+          <span style={{ marginLeft: 12, color: T.green, fontWeight: 700 }}>💰 {fmtGNF(selectedRate.price)}</span>
+        </div>
+      )}
+    </>
+  )}
+  <button
+    style={{ ...S.btn("orange"), width: "100%", justifyContent: "center", padding: 11 }}
+    onClick={handleStart}
+    disabled={
+      (form.isMember && !form.client_id) ||   // Membre non sélectionné
+      (!form.isMember && !form.rateKey)       // Visiteur sans tarif
+    }
+  >
+    ▶ Lancer le chronomètre
+  </button>
+</Modal>
     </div>
   );
 });
+
 // ═══════════════════════════════════════════════════════════════════
 // 18. VUE CAISSE
 // ═══════════════════════════════════════════════════════════════════
