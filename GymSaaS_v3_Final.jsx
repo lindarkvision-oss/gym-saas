@@ -2068,12 +2068,12 @@ const handleStartSeance = useCallback(async (data) => {
     // 2. Encaissement IMMÉDIAT pour les visiteurs (non membres)
     if (!data.isMember && rate.price > 0) {
       const montant = Number(rate.price);
-      const tempTxId = genId();
+      const tempId = genId();
       const desc = `Séance directe — ${data.nom} (${SESSION_RATES[data.rateKey]?.label || data.rateKey})`;
       
       // Ajout local de la transaction
       setCaisse(p => [normalizeCaisse({ 
-        id: tempTxId, 
+        id: tempId, 
         date: new Date().toISOString(), 
         description: desc, 
         montant: montant 
@@ -2083,12 +2083,11 @@ const handleStartSeance = useCallback(async (data) => {
       
       // Enregistrement dans Google Sheets : séance + transaction caisse
       try {
-        // Envoi parallèle des deux actions
         const [seanceRes, caisseRes] = await Promise.all([
           apiPost("startSeance", { 
-            nom: newSeance.nom,
-            type: newSeance.type,
-            debut: newSeance.debut
+            ...newSeance, 
+            montant: montant,
+            description: desc 
           }),
           apiPost("addTransaction", { 
             date: new Date().toISOString(), 
@@ -2098,11 +2097,11 @@ const handleStartSeance = useCallback(async (data) => {
         ]);
         
         // Mise à jour des IDs si retournés par le serveur
-        if (seanceRes?.seanceId) {
-          setSeancesActives(p => p.map(s => s.id === newId ? { ...s, id: String(seanceRes.seanceId) } : s));
+        if (seanceRes?.txId) {
+          setCaisse(p => p.map(t => t.id === tempId ? { ...t, id: String(seanceRes.txId) } : t));
         }
         if (caisseRes?.txId) {
-          setCaisse(p => p.map(t => t.id === tempTxId ? { ...t, id: String(caisseRes.txId) } : t));
+          setCaisse(p => p.map(t => t.id === tempId ? { ...t, id: String(caisseRes.txId) } : t));
         }
       } catch (err) {
         console.error("Erreur lors de l'enregistrement:", err);
@@ -2112,14 +2111,7 @@ const handleStartSeance = useCallback(async (data) => {
     // 3. Pour les membres (gratuit, pas d'encaissement)
     else {
       try {
-        const res = await apiPost("startSeance", { 
-          nom: newSeance.nom,
-          type: newSeance.type,
-          debut: newSeance.debut
-        });
-        if (res?.seanceId) {
-          setSeancesActives(p => p.map(s => s.id === newId ? { ...s, id: String(res.seanceId) } : s));
-        }
+        await apiPost("startSeance", newSeance);
       } catch (err) {
         console.error("Erreur lors de l'enregistrement de la séance:", err);
         showToast("Erreur", "La séance n'a pas pu être synchronisée.", "error");
