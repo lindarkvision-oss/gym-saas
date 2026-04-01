@@ -2065,15 +2065,15 @@ const handleStartSeance = useCallback(async (data) => {
     setSeancesActives(p => [newSeance, ...p]);
     showToast("Séance démarrée", data.nom, "success");
 
-    // 2. NOUVEAU : Encaissement IMMÉDIAT pour les visiteurs (non membres)
+    // 2. Encaissement IMMÉDIAT pour les visiteurs (non membres)
     if (!data.isMember && rate.price > 0) {
       const montant = Number(rate.price);
-      const tempId = genId();
+      const tempTxId = genId();
       const desc = `Séance directe — ${data.nom} (${SESSION_RATES[data.rateKey]?.label || data.rateKey})`;
       
-      // On met dans la caisse locale (Dashboard mis à jour IMMÉDIATEMENT)
+      // Ajout local de la transaction
       setCaisse(p => [normalizeCaisse({ 
-        id: tempId, 
+        id: tempTxId, 
         date: new Date().toISOString(), 
         description: desc, 
         montant: montant 
@@ -2081,70 +2081,51 @@ const handleStartSeance = useCallback(async (data) => {
       
       showToast("✅ Paiement encaissé", `${fmtGNF(montant)} pour la séance de ${data.nom}`, "success");
       
-      // Enregistrement dans Google Sheets avec l'encaissement
+      // Enregistrement dans Google Sheets : séance + transaction caisse
       try {
-        const res = await apiPost("startSeance", { 
-          ...newSeance, 
-          montant: montant,
-          description: desc 
-        });
-        if (res?.txId) setCaisse(p => p.map(t => t.id === tempId ? { ...t, id: String(res.txId) } : t));
+        // Envoi parallèle des deux actions
+        const [seanceRes, caisseRes] = await Promise.all([
+          apiPost("startSeance", { 
+            nom: newSeance.nom,
+            type: newSeance.type,
+            debut: newSeance.debut
+          }),
+          apiPost("addTransaction", { 
+            date: new Date().toISOString(), 
+            description: desc, 
+            montant: montant 
+          })
+        ]);
+        
+        // Mise à jour des IDs si retournés par le serveur
+        if (seanceRes?.seanceId) {
+          setSeancesActives(p => p.map(s => s.id === newId ? { ...s, id: String(seanceRes.seanceId) } : s));
+        }
+        if (caisseRes?.txId) {
+          setCaisse(p => p.map(t => t.id === tempTxId ? { ...t, id: String(caisseRes.txId) } : t));
+        }
       } catch (err) {
-        console.error("Erreur lors de l'enregistrement de la séance:", err);
+        console.error("Erreur lors de l'enregistrement:", err);
         showToast("Erreur", "La séance a démarré mais la synchronisation a échoué.", "error");
       }
     } 
     // 3. Pour les membres (gratuit, pas d'encaissement)
     else {
       try {
-        await apiPost("startSeance", newSeance);
+        const res = await apiPost("startSeance", { 
+          nom: newSeance.nom,
+          type: newSeance.type,
+          debut: newSeance.debut
+        });
+        if (res?.seanceId) {
+          setSeancesActives(p => p.map(s => s.id === newId ? { ...s, id: String(res.seanceId) } : s));
+        }
       } catch (err) {
         console.error("Erreur lors de l'enregistrement de la séance:", err);
         showToast("Erreur", "La séance n'a pas pu être synchronisée.", "error");
       }
     }
   }, [setSeancesActives, setCaisse, showToast]);
-  
-const handleEndSeance = useCallback(async (id, sessionData) => {
-    // On utilise sessionData s'il est fourni (beaucoup plus sûr après un rafraîchissement)
-    const s = sessionData || seancesActives.find(x => x.id === id);
-    if (!s) return;
-    
-    // 1. Disparaît de l'écran direct
-    setSeancesActives(p => p.filter(x => x.id !== id));
-    
-    // 2. Simple notification de fin (sans encaissement car déjà fait au démarrage)
-    if (!s.isMember) {
-      showToast("Séance terminée", `${s.nom} a terminé sa séance`, "success");
-      // On envoie juste la fin à Google Sheets sans encaissement
-      try { 
-        await apiPost("finishSeance", { 
-          id: s.id, 
-          nom: s.nom, 
-          type: s.type, 
-          debut: s.debut, 
-          fin: new Date().toISOString(), 
-          statut: "terminee",
-          montant: 0,  // Pas d'encaissement supplémentaire
-          description: `Séance terminée — ${s.nom} (déjà encaissée au démarrage)`
-        }); 
-      } catch {}
-    } 
-    // 3. Si c'est un MEMBRE (gratuit, toujours pas d'encaissement)
-    else {
-      showToast("Séance terminée", "Séance membre clôturée (gratuit)", "info");
-      try { 
-        await apiPost("finishSeance", { 
-          id: s.id, 
-          nom: s.nom, 
-          type: "membre", 
-          debut: s.debut, 
-          fin: new Date().toISOString(), 
-          statut: "terminee" 
-        }); 
-      } catch {}
-    }
-  }, [seancesActives, setSeancesActives, showToast]);
   
   // ── RENDU ──────────────────────────────────────────────────────
   const authValue = { ...user };
