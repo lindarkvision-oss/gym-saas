@@ -1206,6 +1206,19 @@ const AbonnementsView = memo(({ abonnements, clients, now, syncing, onAdd, onDel
   const [form, setForm] = useState({ client_id: "", type: "", debut: todayISO() });
   const [saving, setSaving] = useState(false);
 
+const [saving, setSaving] = useState(false);
+
+  // --- CE QUE VOUS VENEZ DE COLLER ICI ---
+  const [clientSearch, setClientSearch] = useState("");
+  const clientsFiltres = useMemo(() => {
+    if (!clientSearch) return clients;
+    const low = clientSearch.toLowerCase();
+    return clients.filter(c => 
+      c.nom.toLowerCase().includes(low) || 
+      (c.telephone && c.telephone.includes(low))
+    );
+  }, [clients, clientSearch]);
+  // ----------------------------------------
   const cfg = form.type ? SUB_TYPES[form.type] : null;
   const finPreview = form.debut && cfg ? fmtDate(addDays(new Date(form.debut), cfg.duration - 1)) : "—";
 
@@ -1315,13 +1328,18 @@ const client = clients.find(c => c.id === a.client_id) || { nom: "Client Inconnu
       </div>
       {!filtered.length && <div style={{ ...S.emptyState, ...S.card }}>Aucun abonnement pour ces critères</div>}
 
-      {/* Modal nouveau */}
-      <Modal open={modalAdd} onClose={() => setModalAdd(false)} title="Créer un abonnement">
+{/* Modal nouveau */}
+      <Modal open={modalAdd} onClose={() => { setModalAdd(false); setClientSearch(""); }} title="Créer un abonnement">
+        
+        <div style={{ marginBottom: 12 }}>
+          <SearchBar value={clientSearch} onChange={setClientSearch} placeholder="Rechercher par nom ou numéro..." />
+        </div>
+
         <Sel label="Client *" value={form.client_id} onChange={e => setForm({ ...form, client_id: e.target.value })}>
           <option value="">Sélectionner un client...</option>
-          {clients.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
+          {clientsFiltres.map(c => <option key={c.id} value={c.id}>{c.nom} {c.telephone ? `(${c.telephone})` : ""}</option>)}
         </Sel>
-        <Sel label="Formule *" value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+       <Sel label="Formule *" value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
           <option value="">Sélectionner une formule...</option>
           {Object.entries(SUB_TYPES).map(([k, v]) => (
             <option key={k} value={k}>{v.label} — {fmtGNF(v.price)}</option>
