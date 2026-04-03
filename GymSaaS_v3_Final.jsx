@@ -1254,9 +1254,8 @@ const AbonnementsView = memo(({ abonnements, clients, now, syncing, onAdd, onDel
 
       <div style={S.grid3}>
         {filtered.map(a => {
-          const client = clients.find(c => c.id === a.client_id);
-          if (!client) return null;
-          const cfg = SUB_TYPES[a.type];
+const client = clients.find(c => c.id === a.client_id) || { nom: "Client Inconnu", telephone: "" };
+      const cfg = SUB_TYPES[a.type];
           if (!cfg) return null;
           const status = getSubStatus(a.fin, now);
           const seancesMax = cfg.maxSessions;
