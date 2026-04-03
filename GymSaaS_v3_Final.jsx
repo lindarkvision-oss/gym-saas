@@ -163,8 +163,9 @@ async function fetchWithRetry(url, options = {}, retries = CONFIG.MAX_RETRY) {
   }
 }
 
+// Après
 const apiGet = (sheet) =>
-  fetchWithRetry(`${CONFIG.API_URL}?sheet=${sheet}`);
+  fetchWithRetry(`${CONFIG.API_URL}?sheet=${sheet}&t=${Date.now()}`);
 
 const apiPost = (action, data = {}) =>
   fetchWithRetry(CONFIG.API_URL, {
