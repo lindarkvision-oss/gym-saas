@@ -44,7 +44,7 @@ const CONFIG = {
 // Mots de passe par défaut — modifiables depuis l'app (vue Paramètres, admin uniquement)
 const DEFAULT_PASSWORDS = {
   admin: "Bavon1986",
-  staff: "Gym2025",
+  staff: "20GYM26",
 };
 
 // Métadonnées des comptes (rôle, nom affiché) — ne jamais stocker le mot de passe ici
@@ -1773,9 +1773,9 @@ function ParametresView() {
   };
 
   const handleReset = () => {
-    if (!window.confirm("Réinitialiser les mots de passe par défaut ?\n\nAdmin → Bavon1986\nStaff → Gym2025")) return;
+    if (!window.confirm("Réinitialiser les mots de passe par défaut ?\n\nAdmin → Bavon1986\nStaff → 20GYM26")) return;
     pwdManager.reset();
-    showToast("Mots de passe réinitialisés", "Admin: Bavon1986 · Staff: Gym2025", "info");
+    showToast("Mots de passe réinitialisés", "Admin: Bavon1986 · Staff: 20GYM26", "info");
     setNewAdmin("");
     setNewStaff("");
   };
@@ -1881,7 +1881,7 @@ function ParametresView() {
           {/* Info valeurs après reset */}
           <div style={{ marginTop: 14, fontSize: 11, color: T.textFaint, lineHeight: 1.6 }}>
             Valeurs par défaut après réinitialisation :<br />
-            <strong style={{ color: T.textDim }}>Admin</strong> → Bavon1986 &nbsp;·&nbsp; <strong style={{ color: T.textDim }}>Staff</strong> → Gym2025
+            <strong style={{ color: T.textDim }}>Admin</strong> → Bavon1986 &nbsp;·&nbsp; <strong style={{ color: T.textDim }}>Staff</strong> → 20GYM26
           </div>
         </div>
       </div>
