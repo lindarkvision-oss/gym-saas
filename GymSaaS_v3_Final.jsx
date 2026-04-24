@@ -1965,29 +1965,12 @@ export default function App() {
 
   // Toast manager
   const { toasts, showToast } = useToastManager();
-  const [showWelcome, setShowWelcome] = useState(false);
-const welcomeTimerRef = useRef(null);
 
   // Timer
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(t);
   }, []);
-  
-  // ── EFFET DE BIENVENUE APRÈS CONNEXION ──────────────────────
-  useEffect(() => {
-    if (user && !loading) {
-      setShowWelcome(true);
-      welcomeTimerRef.current = setTimeout(() => {
-        setShowWelcome(false);
-      }, 3000);
-      return () => {
-        if (welcomeTimerRef.current) {
-          clearTimeout(welcomeTimerRef.current);
-        }
-      };
-    }
-  }, [user, loading]);
 
   // Données
   const {
@@ -2015,13 +1998,13 @@ const welcomeTimerRef = useRef(null);
       </ToastContext.Provider>
     );
   }
-const handleLogout = () => {
-  clearSession();
-  setUser(null);
-  setShowWelcome(false);  // ← Ajoutez cette ligne
-  showToast("Déconnecté", "À bientôt !", "info");
-};
-  
+
+  const handleLogout = () => {
+    clearSession();
+    setUser(null);
+    showToast("Déconnecté", "À bientôt !", "info");
+  };
+
   // ── HANDLERS CLIENTS ───────────────────────────────────────────
   const handleAddClient = useCallback(async (form) => {
     const tempId = genId();
@@ -2199,92 +2182,39 @@ const handleEndSeance = useCallback(async (id, sessionData) => {
             onLogout={handleLogout}
           />
 
-<main style={S.main}>
-  {/* 🔥 MESSAGE DE BIENVENUE */}
-  {showWelcome && (
-    <div style={{
-      position: "absolute",
-      top: 0,
-      left: 0,
-      right: 0,
-      background: `linear-gradient(135deg, ${T.greenDark}, #0d2d1a)`,
-      borderBottom: `2px solid ${T.green}`,
-      padding: "16px 24px",
-      zIndex: 100,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <span style={{ fontSize: 24 }}>👋</span>
-        <div>
-          <div style={{ fontWeight: 800, color: T.green, fontSize: 16 }}>
-            Bienvenue dans votre espace de travail !
-          </div>
-          <div style={{ color: T.textDim, fontSize: 12, marginTop: 2 }}>
-            {user.displayName} — {user.role === "admin" ? "Administrateur" : "Staff"}
-          </div>
+          <main style={S.main}>
+            {loading
+              ? (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "70vh", gap: 16 }}>
+                  <div style={S.spinner} />
+                  <div style={{ color: T.textDim, fontSize: 13 }}>Chargement des données...</div>
+                </div>
+              )
+              : (
+                <div style={S.mainInner}>
+                  {view === "dashboard" && (
+                    <DashboardView clients={clients} abonnements={abonnements} caisse={caisse} seancesActives={seancesActives} now={now} offline={offline} />
+                  )}
+                  {view === "clients" && (
+                    <ClientsView clients={clients} abonnements={abonnements} caisse={caisse} now={now} syncing={syncing} onAdd={handleAddClient} onDelete={handleDeleteClient} />
+                  )}
+                  {view === "abonnements" && (
+                    <AbonnementsView abonnements={abonnements} clients={clients} now={now} syncing={syncing} onAdd={handleAddAbonnement} onDelete={handleDeleteAbonnement} onCheckIn={handleCheckIn} />
+                  )}
+                  {view === "seances" && (
+                    <SeancesView seancesActives={seancesActives} clients={clients} now={now} onStart={handleStartSeance} onEnd={handleEndSeance} />
+                  )}
+                  {view === "caisse" && can(user.role, "view_caisse") && (
+                    <CaisseView caisse={caisse} now={now} syncing={syncing} />
+                  )}
+                  {view === "parametres" && user.role === "admin" && (
+                    <ParametresViewV2 />
+                  )}
+                </div>
+              )
+            }
+          </main>
         </div>
-      </div>
-      <button 
-        onClick={() => setShowWelcome(false)}
-        style={{
-          background: "none",
-          border: `1px solid ${T.greenBd}`,
-          color: T.green,
-          padding: "4px 12px",
-          borderRadius: 6,
-          cursor: "pointer",
-          fontSize: 12,
-        }}
-      >
-        ✕ Fermer
-      </button>
-    </div>
-  )}
-
-  {loading
-    ? (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "70vh", gap: 16 }}>
-        <div style={S.spinner} />
-        <div style={{ color: T.textDim, fontSize: 14 }}>
-          Chargement de vos données...
-        </div>
-        <div style={{ color: T.textFaint, fontSize: 11 }}>
-          Synchronisation avec Google Sheets en cours
-        </div>
-      </div>
-    )
-    : (
-      <div style={{
-        ...S.mainInner, 
-        marginTop: showWelcome ? "60px" : "0", 
-        transition: "margin-top 0.3s ease"
-      }}>
-        {/* ... LE RESTE DU CONTENU EXISTANT RESTE IDENTIQUE ... */}
-        {view === "dashboard" && (
-          <DashboardView clients={clients} abonnements={abonnements} caisse={caisse} seancesActives={seancesActives} now={now} offline={offline} />
-        )}
-        {view === "clients" && (
-          <ClientsView clients={clients} abonnements={abonnements} caisse={caisse} now={now} syncing={syncing} onAdd={handleAddClient} onDelete={handleDeleteClient} />
-        )}
-        {view === "abonnements" && (
-          <AbonnementsView abonnements={abonnements} clients={clients} now={now} syncing={syncing} onAdd={handleAddAbonnement} onDelete={handleDeleteAbonnement} onCheckIn={handleCheckIn} />
-        )}
-        {view === "seances" && (
-          <SeancesView seancesActives={seancesActives} clients={clients} now={now} onStart={handleStartSeance} onEnd={handleEndSeance} />
-        )}
-        {view === "caisse" && can(user.role, "view_caisse") && (
-          <CaisseView caisse={caisse} now={now} syncing={syncing} />
-        )}
-        {view === "parametres" && user.role === "admin" && (
-          <ParametresViewV2 />
-        )}
-      </div>
-    )
-  }
-</main>
-</div>
 
         <ToastManager toasts={toasts} />
       </ToastContext.Provider>
