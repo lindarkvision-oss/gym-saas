@@ -1965,8 +1965,6 @@ export default function App() {
 
   // Toast manager
   const { toasts, showToast } = useToastManager();
-  const [showWelcome, setShowWelcome] = useState(false);
-const welcomeTimerRef = useRef(null);
 
   // Timer
   useEffect(() => {
@@ -1998,6 +1996,8 @@ const welcomeTimerRef = useRef(null);
     loading, syncing, offline, lastSync,
     loadData,
   } = useGymData(showToast);
+  const [showWelcome, setShowWelcome] = useState(false);
+const welcomeTimerRef = useRef(null);
 
   // Compteur alertes pour badge sidebar
   const alertCount = useMemo(() =>
