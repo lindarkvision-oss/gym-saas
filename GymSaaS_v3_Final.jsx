@@ -1206,8 +1206,6 @@ const AbonnementsView = memo(({ abonnements, clients, now, syncing, onAdd, onDel
   const [form, setForm] = useState({ client_id: "", type: "", debut: todayISO() });
   const [saving, setSaving] = useState(false);
 
-const [saving, setSaving] = useState(false);
-
   // --- CE QUE VOUS VENEZ DE COLLER ICI ---
   const [clientSearch, setClientSearch] = useState("");
   const clientsFiltres = useMemo(() => {
