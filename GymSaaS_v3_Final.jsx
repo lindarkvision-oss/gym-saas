@@ -1965,6 +1965,8 @@ export default function App() {
 
   // Toast manager
   const { toasts, showToast } = useToastManager();
+  const [showWelcome, setShowWelcome] = useState(false);
+const welcomeTimerRef = useRef(null);
 
   // Timer
   useEffect(() => {
@@ -1973,30 +1975,6 @@ export default function App() {
   }, []);
   
   // ── EFFET DE BIENVENUE APRÈS CONNEXION ──────────────────────
-  // Toast manager
-  const { toasts, showToast } = useToastManager();
-
-  // Timer
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 30_000);
-    return () => clearInterval(t);
-  }, []);
-
-  // Données - IMPORTANT : doit être AVANT le useEffect de bienvenue
-  const {
-    clients, setClients,
-    abonnements, setAbonnements,
-    caisse, setCaisse,
-    seancesActives, setSeancesActives,
-    loading, syncing, offline, lastSync,
-    loadData,
-  } = useGymData(showToast);
-
-  // 🔥 Déclaration des states AVANT le useEffect
-  const [showWelcome, setShowWelcome] = useState(false);
-  const welcomeTimerRef = useRef(null);
-
-  // 🔥 Puis le useEffect de bienvenue APRÈS
   useEffect(() => {
     if (user && !loading) {
       setShowWelcome(true);
@@ -2011,11 +1989,16 @@ export default function App() {
     }
   }, [user, loading]);
 
-  // Compteur alertes pour badge sidebar
-  const alertCount = useMemo(() =>
-    abonnements.filter(a => ["expiring", "expired"].includes(getSubStatus(a.fin, now))).length,
-    [abonnements, now]
-  );
+  // Données
+  const {
+    clients, setClients,
+    abonnements, setAbonnements,
+    caisse, setCaisse,
+    seancesActives, setSeancesActives,
+    loading, syncing, offline, lastSync,
+    loadData,
+  } = useGymData(showToast);
+
   // Compteur alertes pour badge sidebar
   const alertCount = useMemo(() =>
     abonnements.filter(a => ["expiring", "expired"].includes(getSubStatus(a.fin, now))).length,
