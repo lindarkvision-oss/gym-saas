@@ -29,12 +29,13 @@ import {
 // ═══════════════════════════════════════════════════════════════════
 
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbxyHsoWkCNzhRmqyiVkyVwJNDXmffh4RqUBdexSOAqFCDPM355bew9vjnn0mGuGWXtu/exec",
+  API_URL: "https://script.google.com/macros/s/AKfycbw2X-CBg8RKbKFaJVNWHBa_Y6hTZYpThUt_C6M7YRpNhRxrKBavWU3aDxe_dtJ-U28h/exec",
+  API_URL_ARTS: "https://script.google.com/macros/s/AKfycbxrPQPLcgyl3Dz5JA5KU5H5Q-eYrQB_zuOtIclPDhN10avEOuxTMs6rzO5MPPFmRepxCg/exec",
   APP_NAME: "Gym Nouvel Élan",
   VERSION: "2.1.0",
   PASSWORDS_KEY: "gym_passwords",
-  REFRESH_INTERVAL: 120_000,       // 2 min
-  SESSION_TTL: 8 * 60 * 60 * 1000, // 8h
+  REFRESH_INTERVAL: 120_000,
+  SESSION_TTL: 8 * 60 * 60 * 1000,
   MAX_RETRY: 3,
   RETRY_DELAY: 1500,
   CACHE_KEY: "gym_cache_v2",
@@ -174,6 +175,17 @@ const apiPost = (action, data = {}) =>
     body: JSON.stringify({ action, ...data }),
   });
 
+// ─── API pour les arts martiaux (nouvelle URL) ──────────────────
+const apiGetArts = (sheet) =>
+  fetchWithRetry(`${CONFIG.API_URL_ARTS}?sheet=${sheet}&t=${Date.now()}`);
+
+const apiPostArts = (action, data = {}) =>
+  fetchWithRetry(CONFIG.API_URL_ARTS, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain" },
+    body: JSON.stringify({ action, ...data }),
+  });
+
 /** Persistance locale (offline fallback) */
 const cache = {
   save(data) {
@@ -291,9 +303,11 @@ const getClientSubStatus = (clientId, abonnements, now) => {
 
 const AuthContext = createContext(null);
 const ToastContext = createContext(null);
+const SettingsContext = createContext(null);
 
 const useAuth = () => useContext(AuthContext);
 const useToast = () => useContext(ToastContext);
+const useSettingsCtx = () => useContext(SettingsContext);
 
 // ═══════════════════════════════════════════════════════════════════
 // 9. DESIGN SYSTEM — TOKENS + STYLES
@@ -301,16 +315,16 @@ const useToast = () => useContext(ToastContext);
 
 const T = {
   // Couleurs
-  bg:        "#090909",
-  surface:   "#111111",
-  surface2:  "#161616",
-  surface3:  "#1a1a1a",
-  border:    "#1e1e1e",
-  border2:   "#252525",
-  text:      "#e8e8e8",
-  textMid:   "#888",
-  textDim:   "#555",
-  textFaint: "#333",
+  bg:        "var(--bg)",
+  surface:   "var(--surface)",
+  surface2:  "var(--surface2)",
+  surface3:  "var(--surface3)",
+  border:    "var(--border)",
+  border2:   "var(--border2)",
+  text:      "var(--text)",
+  textMid:   "var(--text-mid)",
+  textDim:   "var(--text-dim)",
+  textFaint: "var(--text-faint)",
   green:     "#4ade80",
   greenDark: "#0d2d1a",
   greenBd:   "#1a4d2a",
@@ -340,7 +354,7 @@ const S = {
   },
   logo: { padding: "24px 18px 20px", borderBottom: `1px solid ${T.border}` },
   logoSub: { fontSize: 9, letterSpacing: "0.2em", color: T.textDim, textTransform: "uppercase", marginBottom: 5 },
-  logoMain: { fontSize: 18, fontWeight: 900, color: "#fff", lineHeight: 1.2 },
+  logoMain: { fontSize: 18, fontWeight: 900, color: T.text, lineHeight: 1.2 },
   logoAccent: { color: T.green },
   logoVersion: { fontSize: 9, color: T.textFaint, marginTop: 4 },
   nav: { flex: 1, padding: "12px 10px", display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" },
@@ -362,20 +376,37 @@ const S = {
   },
 
   // ── Main
-  main: { flex: 1, overflowY: "auto", minWidth: 0 },
+  // ── Top Bar (fixe)
+  topBar: {
+    position: "fixed", top: 0, left: 0, right: 0, height: 56,
+    background: "rgba(9, 9, 9, 0.92)", backdropFilter: "blur(12px)",
+    borderBottom: `1px solid ${T.border}`,
+    display: "flex", alignItems: "center", justifyContent: "space-between",
+    padding: "0 16px", zIndex: 99,
+  },
+  main: { flex: 1, overflowY: "auto", minWidth: 0, paddingTop: "56px" },
   mainInner: { padding: "28px 32px", maxWidth: 1400 },
 
   // ── Page header
   pageHeader: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 },
-  pageTitle: { fontSize: 22, fontWeight: 800, color: "#fff", letterSpacing: "-0.03em", margin: 0 },
+  pageTitle: { fontSize: 22, fontWeight: 800, color: T.text, letterSpacing: "-0.03em", margin: 0 },
   pageSubtitle: { fontSize: 12, color: T.textDim, marginTop: 3 },
 
   // ── KPI
   kpiGrid: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 24 },
   kpiCard: { background: T.surface, border: `1px solid ${T.border}`, borderRadius: 14, padding: "18px 18px 14px", position: "relative", overflow: "hidden", cursor: "default" },
-  kpiBar: (c) => ({ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: c }),
+  kpiBar: (c) => ({
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    background: `linear-gradient(90deg, ${c}00, ${c}, ${c}00)`,
+    opacity: 0.85,
+    borderRadius: "0 0 2px 2px",
+  }),
   kpiLabel: { fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 8, fontWeight: 600 },
-  kpiValue: { fontSize: 24, fontWeight: 900, color: "#fff", letterSpacing: "-0.04em", lineHeight: 1 },
+  kpiValue: { fontSize: 24, fontWeight: 900, color: T.text, letterSpacing: "-0.04em", lineHeight: 1 },
   kpiSub: { fontSize: 10, color: T.textFaint, marginTop: 5 },
   kpiDelta: (pos) => ({ fontSize: 10, fontWeight: 700, color: pos ? T.green : T.red, marginTop: 3 }),
 
@@ -443,7 +474,7 @@ const S = {
   overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 },
   modalBox: { background: T.surface, border: `1px solid #252525`, borderRadius: 16, width: "100%", maxWidth: 440, maxHeight: "92vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.7)" },
   modalHead: { padding: "16px 18px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 },
-  modalTitle: { fontSize: 15, fontWeight: 700, color: "#fff" },
+  modalTitle: { fontSize: 15, fontWeight: 700, color: T.text },
   modalBody: { padding: "18px", overflowY: "auto", flex: 1 },
   modalFoot: { padding: "14px 18px", borderTop: `1px solid ${T.border}`, display: "flex", gap: 8, justifyContent: "flex-end", flexShrink: 0 },
 
@@ -497,17 +528,25 @@ const StatusBadge = memo(({ status }) => {
 
 const WaBtn = memo(({ phone, message, icon }) => {
   const url = `https://wa.me/${(phone || "").replace(/\D/g, "")}?text=${encodeURIComponent(message)}`;
+  
+  // Icône SVG WhatsApp officiel
+  const WhatsappIcon = (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ verticalAlign: "middle" }}>
+      <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.713-1.457L0 24zm6.59-4.846c1.6.95 3.488 1.451 5.414 1.452 5.334 0 9.68-4.341 9.683-9.671a9.58 9.58 0 0 0-2.835-6.843A9.593 9.593 0 0 0 12.004 1.34C6.673 1.34 2.327 5.68 2.324 11.01c-.001 1.93.504 3.811 1.464 5.421l-.991 3.618 3.715-.973zm11.332-6.52c-.312-.156-1.847-.91-2.128-1.012-.282-.101-.487-.156-.692.156-.204.311-.79.997-.968 1.201-.178.205-.355.228-.667.072-.311-.156-1.317-.485-2.51-1.549-.928-.827-1.554-1.85-1.736-2.162-.182-.311-.02-.48.136-.635.14-.139.312-.363.468-.545.156-.182.208-.312.312-.52.104-.207.052-.389-.026-.545-.078-.156-.692-1.666-.947-2.28-.25-.599-.503-.518-.692-.527-.179-.008-.385-.01-.591-.01-.206 0-.543.078-.827.39-.283.311-1.08 1.054-1.08 2.57 0 1.517 1.102 2.984 1.256 3.193.154.208 2.169 3.312 5.255 4.643.734.316 1.307.504 1.753.646.737.234 1.407.201 1.937.12.59-.09 1.847-.756 2.109-1.451.262-.695.262-1.288.185-1.411-.078-.124-.283-.195-.595-.351z"/>
+    </svg>
+  );
+
   return (
-    <a href={url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+    <a href={url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }} onClick={e => e.stopPropagation()}>
       {icon
-        ? <div style={S.iconBtn("wa")}>💬</div>
-        : <button style={S.btn("wa")}>💬 Relancer</button>
+        ? <div style={S.iconBtn("wa")}>{WhatsappIcon}</div>
+        : <button style={{ ...S.btn("wa"), gap: 8 }}>{WhatsappIcon} Relancer</button>
       }
     </a>
   );
 });
 
-function Modal({ open, onClose, title, children, footer, maxWidth = 440 }) {
+function Modal({ open, onClose, title, children, footer, maxWidth = 440, closeOnOverlay = true }) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => e.key === "Escape" && onClose();
@@ -516,7 +555,14 @@ function Modal({ open, onClose, title, children, footer, maxWidth = 440 }) {
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div
+  style={S.overlay}
+  onClick={e => {
+    if (closeOnOverlay && e.target === e.currentTarget) {
+      onClose();
+    }
+  }}
+>
       <div style={{ ...S.modalBox, maxWidth }}>
         <div style={S.modalHead}>
           <span style={S.modalTitle}>{title}</span>
@@ -535,7 +581,7 @@ function ConfirmModal({ open, onClose, onConfirm, title, message, danger = true 
     <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={S.confirmBox}>
         <div style={{ fontSize: 28, marginBottom: 10 }}>{danger ? "⚠️" : "❓"}</div>
-        <div style={{ fontWeight: 800, fontSize: 15, color: "#fff", marginBottom: 8 }}>{title}</div>
+        <div style={{ fontWeight: 800, fontSize: 15, color: T.text, marginBottom: 8 }}>{title}</div>
         <div style={{ fontSize: 13, color: T.textDim, lineHeight: 1.55, marginBottom: 20 }}>{message}</div>
         <div style={{ display: "flex", gap: 8 }}>
           <button style={{ ...S.btn("ghost"), flex: 1, justifyContent: "center" }} onClick={onClose}>Annuler</button>
@@ -587,7 +633,7 @@ function ToastManager({ toasts }) {
 // ─── Sparkline SVG simple ──────────────────────────────────────────
 function Sparkline({ values = [], color = T.green, height = 36, width = 100 }) {
   if (!values.length || values.every(v => v === 0)) {
-    return <svg width={width} height={height}><line x1="0" y1={height - 2} x2={width} y2={height - 2} stroke={T.border} strokeWidth="1" /></svg>;
+    return <svg width={width} height={height}><line x1="0" y1={height - 2} x2={width} y2={height - 2} style={{ stroke: T.border }} strokeWidth="1" /></svg>;
   }
   const max = Math.max(...values, 1);
   const pts = values.map((v, i) => {
@@ -648,7 +694,7 @@ function LoginScreen({ onLogin }) {
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <div style={{ fontSize: 9, letterSpacing: "0.2em", color: T.textDim, textTransform: "uppercase", marginBottom: 6 }}>Gym Management</div>
-          <div style={{ fontSize: 26, fontWeight: 900, color: "#fff", lineHeight: 1.1 }}>
+          <div style={{ fontSize: 26, fontWeight: 900, color: T.text, lineHeight: 1.1 }}>
             NOUVEL <span style={{ color: T.green }}>ÉLAN</span>
           </div>
           <div style={{ fontSize: 11, color: T.textDim, marginTop: 8 }}>Plateforme de gestion · v{CONFIG.VERSION}</div>
@@ -821,6 +867,165 @@ function useToastManager() {
 
   return { toasts, showToast };
 }
+// ═══════════════════════════════════════════════════════════════════
+// 13-B. HOOK DONNÉES ARTS MARTIAUX (API Google Sheets)
+// ═══════════════════════════════════════════════════════════════════
+
+function useArtsMartiauxData(showToast) {
+  const [eleves, setEleves] = useState([]);
+  const [paiements, setPaiements] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+
+  // Chargement des données
+  const loadData = useCallback(async () => {
+    setSyncing(true);
+    try {
+      const [resEleves, resPaiements] = await Promise.all([
+        apiGetArts("inscriptions_arts"),
+        apiGetArts("paiements_arts"),
+      ]);
+
+      const extract = (res) => Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
+      
+      const newEleves = extract(resEleves).map(r => ({
+        id: String(r.id || genId()),
+        nom: String(r.nom || ""),
+        telephone: String(r.telephone || ""),
+        age: String(r.age || ""),
+        sexe: String(r.sexe || ""),
+        discipline: String(r.discipline || ""),
+        date_inscription: r.date_inscription ? String(r.date_inscription) : todayISO(),
+        created_at: r.created_at || new Date().toISOString(),
+      }));
+
+      const newPaiements = extract(resPaiements).map(r => ({
+        id: String(r.id || genId()),
+        eleve_id: String(r.eleve_id || ""),
+        mois: Number(r.mois || 0),
+        annee: Number(r.annee || new Date().getFullYear()),
+        date_paiement: r.date_paiement ? String(r.date_paiement) : new Date().toISOString(),
+        montant: Number(r.montant || 0),
+        observation: String(r.observation || ""),
+        created_at: r.created_at || new Date().toISOString(),
+      }));
+
+      setEleves(newEleves);
+      setPaiements(newPaiements);
+      setLoading(false);
+    } catch (err) {
+      showToast("Erreur", "Impossible de charger les données arts martiaux", "error");
+      setLoading(false);
+    } finally {
+      setSyncing(false);
+    }
+  }, [showToast]);
+
+  // Chargement initial
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const addEleve = useCallback(async (form) => {
+    const tempId = genId();
+    const newEleve = {
+      id: tempId,
+      nom: form.nom,
+      telephone: form.telephone,
+      age: form.age,
+      sexe: form.sexe,
+      discipline: form.discipline,
+      date_inscription: form.date_inscription || todayISO(),
+    };
+    
+    setEleves(prev => [newEleve, ...prev]);
+    showToast("Inscription en cours...", "Synchronisation avec le serveur", "info");
+    
+    try {
+      const res = await apiPostArts("addInscriptionArts", newEleve);
+      if (res?.id) {
+        setEleves(prev => prev.map(e => e.id === tempId ? { ...e, id: String(res.id) } : e));
+        showToast("Inscription réussie", `${form.nom} ajouté(e)`, "success");
+        return res;
+      }
+    } catch (err) {
+      showToast("Erreur", "Échec de la synchronisation", "error");
+      throw err;
+    }
+  }, [showToast]);
+
+  const addPaiement = useCallback(async (data) => {
+    const tempId = genId();
+    const newPaiement = {
+      id: tempId,
+      eleve_id: data.eleve_id,
+      mois: data.mois,
+      annee: data.annee || new Date().getFullYear(),
+      date_paiement: data.date_paiement || new Date().toISOString(),
+      montant: data.montant,
+      observation: data.observation || "",
+    };
+    
+    setPaiements(prev => [newPaiement, ...prev]);
+    showToast("Paiement enregistré", `Montant: ${fmtGNF(data.montant)}`, "success");
+    
+    try {
+      const res = await apiPostArts("addPaiementArts", newPaiement);
+      if (res?.id) {
+        setPaiements(prev => prev.map(p => p.id === tempId ? { ...p, id: String(res.id) } : p));
+      }
+      return res;
+    } catch (err) {
+      showToast("Erreur", "Échec de l'enregistrement du paiement", "error");
+      throw err;
+    }
+  }, [showToast]);
+
+  const deleteEleve = useCallback(async (id) => {
+    setEleves(prev => prev.filter(e => e.id !== id));
+    setPaiements(prev => prev.filter(p => p.eleve_id !== id));
+    showToast("Suppression", "Élève supprimé", "info");
+    try {
+      await apiPostArts("deleteInscriptionArts", { id });
+    } catch (err) {
+      showToast("Erreur", "Échec de la suppression", "error");
+    }
+  }, [showToast]);
+
+  const getPaiementsByEleve = useCallback((eleveId) => {
+    return paiements.filter(p => p.eleve_id === eleveId);
+  }, [paiements]);
+
+  const getTotalPaiements = useCallback(() => {
+    return paiements.reduce((sum, p) => sum + (p.montant || 0), 0);
+  }, [paiements]);
+
+  const getPaiementsDuMois = useCallback((mois, annee) => {
+    const now = new Date();
+    const m = mois !== undefined ? mois : now.getMonth();
+    const a = annee !== undefined ? annee : now.getFullYear();
+    return paiements.filter(p => p.mois === m && p.annee === a);
+  }, [paiements]);
+
+  const getMontantDuMois = useCallback((mois, annee) => {
+    return getPaiementsDuMois(mois, annee).reduce((sum, p) => sum + (p.montant || 0), 0);
+  }, [getPaiementsDuMois]);
+
+  return {
+    eleves,
+    paiements,
+    loading,
+    syncing,
+    loadData,
+    addEleve,
+    addPaiement,
+    deleteEleve,
+    getPaiementsByEleve,
+    getTotalPaiements,
+    getPaiementsDuMois,
+    getMontantDuMois,
+  };
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // 14. VUE DASHBOARD
@@ -875,14 +1080,14 @@ const DashboardView = memo(({ clients, abonnements, caisse, seancesActives, now,
       {offline && <div style={S.offlineBanner}>⚠ Hors ligne — données locales affichées. Vérifiez votre connexion.</div>}
 
       {/* KPIs */}
-      <div style={S.kpiGrid}>
-        <div style={S.kpiCard}>
+            <div className="kpi-grid" style={S.kpiGrid}>
+        <div className="kpi-card" style={S.kpiCard}>
           <div style={S.kpiBar(T.green)} />
           <div style={S.kpiLabel}>Revenus aujourd'hui</div>
           <div style={S.kpiValue}>{fmtGNF(stats.revJour)}</div>
           <div style={S.kpiSub}>encaissé ce jour</div>
         </div>
-        <div style={S.kpiCard}>
+        <div className="kpi-card" style={S.kpiCard}>
           <div style={S.kpiBar(T.blue)} />
           <div style={S.kpiLabel}>Revenus du mois</div>
           <div style={S.kpiValue}>{fmtGNF(stats.revMois)}</div>
@@ -895,13 +1100,13 @@ const DashboardView = memo(({ clients, abonnements, caisse, seancesActives, now,
             <Sparkline values={stats.spark} color={T.blue} width={110} height={30} />
           </div>
         </div>
-        <div style={S.kpiCard}>
+        <div className="kpi-card" style={S.kpiCard}>
           <div style={S.kpiBar(T.purple)} />
           <div style={S.kpiLabel}>Membres actifs</div>
           <div style={S.kpiValue}>{stats.actifs}</div>
           <div style={S.kpiSub}>sur {stats.totalClients} inscrits</div>
         </div>
-        <div style={S.kpiCard}>
+        <div className="kpi-card" style={S.kpiCard}>
           <div style={S.kpiBar(T.orange)} />
           <div style={S.kpiLabel}>Séances en cours</div>
           <div style={S.kpiValue}>{seancesActives.length}</div>
@@ -942,7 +1147,7 @@ const DashboardView = memo(({ clients, abonnements, caisse, seancesActives, now,
             : recent.map(t => (
               <div key={t.id} style={S.txRow}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, color: "#ccc", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.description}</div>
+                  <div style={{ fontSize: 12, color: T.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.description}</div>
                   <div style={{ fontSize: 10, color: T.textDim, marginTop: 1 }}>{fmtDate(t.date)} {fmtTime(t.date)}</div>
                 </div>
                 <span style={{ color: T.green, fontWeight: 800, fontSize: 12, whiteSpace: "nowrap" }}>+{fmtGNF(t.montant)}</span>
@@ -1053,7 +1258,7 @@ const ClientsView = memo(({ clients, abonnements, caisse, now, syncing, onAdd, o
       </div>
 
       <div style={S.card}>
-        <table style={S.table}>
+        <table className="clients-table" style={S.table}>
           <thead>
             <tr>
               {["Client", "Téléphone", "Objectif", "Statut abo.", "Inscription", "Actions"].map((h, i) => (
@@ -1065,7 +1270,7 @@ const ClientsView = memo(({ clients, abonnements, caisse, now, syncing, onAdd, o
             {filtered.map((c, idx) => {
               const subStatus = getClientSubStatus(c.id, abonnements, now);
               return (
-                <tr key={c.id} style={{ transition: "background 0.08s" }}>
+                <tr key={c.id} style={{ transition: "background 0.08s", cursor: "pointer" }} onClick={() => setFiche(c)}>
                   <td style={S.td}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <Avatar name={c.nom} idx={clients.indexOf(c)} />
@@ -1084,7 +1289,7 @@ const ClientsView = memo(({ clients, abonnements, caisse, now, syncing, onAdd, o
                       <div style={S.iconBtn("info")} onClick={() => setFiche(c)} title="Fiche client">👤</div>
                       <WaBtn phone={c.telephone} message={`Bonjour ${c.nom.split(" ")[0]}, ça fait longtemps ! Revenez nous voir au Gym Nouvel Élan 💪`} icon />
                       {can(role, "delete_client") && (
-                        <div style={S.iconBtn("danger")} onClick={() => setConfirmDel(c)} title="Supprimer">🗑</div>
+                        <div style={S.iconBtn("danger")} onClick={(e) => { e.stopPropagation(); setConfirmDel(c); }} title="Supprimer">🗑</div>
                       )}
                     </div>
                   </td>
@@ -1108,7 +1313,7 @@ const ClientsView = memo(({ clients, abonnements, caisse, now, syncing, onAdd, o
               <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
                 <Avatar name={fiche.nom} idx={idx} />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 800, fontSize: 17, color: "#fff" }}>{fiche.nom}</div>
+                  <div style={{ fontWeight: 800, fontSize: 17, color: T.text }}>{fiche.nom}</div>
                   <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>
                     {fiche.telephone || "Pas de tél."} · Inscrit le {fmtDate(fiche.date_inscription)}
                   </div>
@@ -1204,11 +1409,14 @@ const AbonnementsView = memo(({ abonnements, clients, now, syncing, onAdd, onDel
   const [modalAdd, setModalAdd] = useState(false);
   const [confirmDel, setConfirmDel] = useState(null);
   const [form, setForm] = useState({ client_id: "", type: "", debut: todayISO() });
-  const [saving, setSaving] = useState(false);
+const [saving, setSaving] = useState(false);
 
-  // --- CE QUE VOUS VENEZ DE COLLER ICI ---
-  const [clientSearch, setClientSearch] = useState("");
-  const clientsFiltres = useMemo(() => {
+const [pointageModal, setPointageModal] = useState(false);
+const [pointageData, setPointageData] = useState(null);
+
+// --- CE QUE VOUS VENEZ DE COLLER ICI ---
+const [clientSearch, setClientSearch] = useState("");
+const clientsFiltres = useMemo(() => {
     if (!clientSearch) return clients;
     const low = clientSearch.toLowerCase();
     return clients.filter(c => 
@@ -1241,7 +1449,23 @@ const AbonnementsView = memo(({ abonnements, clients, now, syncing, onAdd, onDel
     setModalAdd(false);
     setSaving(false);
   };
+  const handleCheckIn = async (abonnement) => {
+  const success = await onCheckIn(abonnement.id);
 
+  if (!success) return;
+
+  const client = clients.find(c => c.id === abonnement.client_id);
+
+  setPointageData({
+    client,
+    abonnement: {
+      ...abonnement,
+      seances_restantes: Math.max(0, abonnement.seances_restantes - 1)
+    }
+  });
+
+  setPointageModal(true);
+};
   return (
     <div>
       <div style={S.pageHeader}>
@@ -1263,7 +1487,7 @@ const AbonnementsView = memo(({ abonnements, clients, now, syncing, onAdd, onDel
         </div>
       </div>
 
-      <div style={S.grid3}>
+      <div className="grid3 subs-grid" style={S.grid3}>
         {filtered.map(a => {
 const client = clients.find(c => c.id === a.client_id) || { nom: "Client Inconnu", telephone: "" };
       const cfg = SUB_TYPES[a.type];
@@ -1276,7 +1500,11 @@ const client = clients.find(c => c.id === a.client_id) || { nom: "Client Inconnu
           const idx = clients.indexOf(client);
 
           return (
-            <div key={a.id} style={{ ...S.subCard, borderColor: status === "expired" ? T.redBd : status === "expiring" ? "#4d2e00" : T.border }}>
+            <div
+  key={a.id}
+  className="sub-card"
+  style={{ ...S.subCard, borderColor: status === "expired" ? T.redBd : status === "expiring" ? "#4d2e00" : T.border }}
+>
               <div style={S.subCardHead}>
                 <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0, flex: 1 }}>
                   <Avatar name={client.nom} idx={idx} />
@@ -1310,7 +1538,12 @@ const client = clients.find(c => c.id === a.client_id) || { nom: "Client Inconnu
                 <WaBtn phone={client.telephone} message={`Bonjour ${client.nom.split(" ")[0]}, votre abonnement expire le ${fmtDate(a.fin)}. Pensez à renouveler au Gym Nouvel Élan !`} icon />
                 <div style={{ display: "flex", gap: 5 }}>
                   {seancesMax && status !== "expired" && !full && (
-                    <button style={S.btn("ghost")} onClick={() => onCheckIn(a.id)}>✓ Pointer</button>
+                    <button
+  style={S.btn("ghost")}
+  onClick={() => handleCheckIn(a)}
+>
+  ✓ Pointer
+</button>
                   )}
                   {status === "expired" && (
                     <button style={S.btn("primary")} onClick={() => setModalAdd(true)}>↻ Renouveler</button>
@@ -1366,6 +1599,88 @@ const client = clients.find(c => c.id === a.client_id) || { nom: "Client Inconnu
         title="Supprimer cet abonnement ?"
         message={`Supprimer l'abonnement "${SUB_TYPES[confirmDel?.type]?.label}" ? Cette action est irréversible.`}
       />
+      <Modal
+  open={pointageModal}
+  onClose={() => setPointageModal(false)}
+  title="Pointage effectué avec succès"
+  closeOnOverlay={false}
+>
+  {pointageData && (
+    <>
+      <div
+        style={{
+          background: T.surface2,
+          border: `1px solid ${T.border}`,
+          borderRadius: 10,
+          padding: 14,
+          marginBottom: 18,
+          lineHeight: 1.7,
+          fontSize: 13
+        }}
+      >
+        <div><strong>👤 Client :</strong> {pointageData.client?.nom}</div>
+        <div><strong>🏋️ Formule :</strong> {SUB_TYPES[pointageData.abonnement.type]?.label}</div>
+        <div><strong>📅 Début :</strong> {fmtDate(pointageData.abonnement.debut)}</div>
+        <div><strong>📅 Fin :</strong> {fmtDate(pointageData.abonnement.fin)}</div>
+        <div>
+          <strong>🎯 Séances restantes :</strong>{" "}
+          {pointageData.abonnement.seances_restantes}
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 10
+        }}
+      >
+        <button
+          style={S.btn("ghost")}
+          onClick={() => setPointageModal(false)}
+        >
+          Annuler
+        </button>
+
+        <button
+  style={S.btn("wa")}
+  onClick={() => {
+    if (!pointageData?.client?.telephone) {
+      showToast(
+        "Téléphone manquant",
+        "Ce client ne possède pas de numéro WhatsApp.",
+        "error"
+      );
+      return;
+    }
+
+    const message = `Bonjour ${pointageData.client.nom},
+
+✅ Votre séance a bien été enregistrée.
+
+🏋️ Formule : ${SUB_TYPES[pointageData.abonnement.type]?.label}
+
+📅 Début : ${fmtDate(pointageData.abonnement.debut)}
+📅 Fin : ${fmtDate(pointageData.abonnement.fin)}
+
+🎯 Séances restantes : ${pointageData.abonnement.seances_restantes}
+
+Merci pour votre confiance.
+Gym Nouvel Élan 💪`;
+
+    const url = `https://wa.me/${pointageData.client.telephone.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`;
+
+    window.open(url, "_blank");
+
+    setPointageModal(false);
+  }}
+>
+  💬 Envoyer la confirmation
+</button>
+      </div>
+    </>
+  )}
+</Modal>
     </div>
   );
 });
@@ -1425,7 +1740,7 @@ const handleStart = () => {
           <div style={{ fontWeight: 700, color: T.textMid, fontSize: 15 }}>Aucune séance active</div>
         </div>
       ) : (
-        <div style={S.grid3}>
+        <div className="grid3 subs-grid" style={S.grid3}>
           {seancesActives.map(s => {
             // CALCUL EN DIRECT HYPER SÉCURISÉ
             const debutMs = typeof s.debut === "string" ? new Date(s.debut).getTime() : s.debut;
@@ -1601,7 +1916,7 @@ const CaisseView = memo(({ caisse, now, syncing }) => {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 22 }}>
         {[
           { label: "Encaissé aujourd'hui", value: fmtGNF(stats.revJour), accent: T.green, color: T.green },
-          { label: "Encaissé ce mois", value: fmtGNF(stats.revMois), accent: T.blue, color: "#fff" },
+          { label: "Encaissé ce mois", value: fmtGNF(stats.revMois), accent: T.blue, color: T.text },
           { label: `Période sélectionnée (${stats.countFiltre} tx)`, value: fmtGNF(stats.totalFiltre), accent: T.purple, color: T.purple },
         ].map(({ label, value, accent, color }) => (
           <div key={label} style={{ ...S.kpiCard }}>
@@ -1886,12 +2201,1221 @@ function ParametresView() {
     </div>
   );
 }
+// ═══════════════════════════════════════════════════════════════════
+// 19. VUE ARTS MARTIAUX
+// ═══════════════════════════════════════════════════════════════════
 
+function ArtsMartiauxView() {
+  const { role } = useAuth();
+  const showToast = useToast();
+  const [modal, setModal] = useState(null); // "inscription" | "liste" | "paiements" | "statistiques" | "fiche"
+
+  // Hook avec API
+  const {
+    eleves,
+    paiements,
+    loading,
+    syncing,
+    loadData,
+    addEleve,
+    addPaiement,
+    deleteEleve,
+    getPaiementsByEleve,
+    getTotalPaiements,
+    getPaiementsDuMois,
+    getMontantDuMois,
+  } = useArtsMartiauxData(showToast);
+  // États du formulaire d'inscription
+  const [form, setForm] = useState({
+    nom: "",
+    telephone: "",
+    age: "",
+    sexe: "",
+    discipline: "",
+    date_inscription: todayISO(),
+  });
+  const [saving, setSaving] = useState(false);
+  const [searchList, setSearchList] = useState("");
+  const [selectedEleve, setSelectedEleve] = useState(null);
+  // États pour les paiements
+  const [selectedEleveId, setSelectedEleveId] = useState("");
+  const [montantPaiement, setMontantPaiement] = useState("");
+  const [observationPaiement, setObservationPaiement] = useState("");
+  const [paiementSaving, setPaiementSaving] = useState(false);
+
+  // Gestion de l'inscription
+  const handleInscription = async () => {
+    // Validation des champs obligatoires
+    if (!form.nom.trim()) {
+      showToast("Champ requis", "Le nom est obligatoire", "error");
+      return;
+    }
+    if (!form.discipline) {
+      showToast("Champ requis", "Veuillez sélectionner une discipline", "error");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await addEleve(form);
+      // Réinitialiser le formulaire
+      setForm({
+        nom: "",
+        telephone: "",
+        age: "",
+        sexe: "",
+        discipline: "",
+        date_inscription: todayISO(),
+      });
+      setModal(null);
+    } catch (err) {
+      // L'erreur est déjà gérée dans le hook
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const CARDS = [
+    { id: "inscription", label: "Nouvelle inscription", icon: "🥋", color: T.green },
+    { id: "liste", label: "Liste des élèves", icon: "👥", color: T.blue },
+    { id: "paiements", label: "Paiements du mois", icon: "💰", color: T.orange },
+    { id: "statistiques", label: "Statistiques", icon: "📈", color: T.purple },
+  ];
+
+  const handleCardClick = (id) => {
+    if (id === "inscription" && role === "staff") {
+      // Le staff peut inscrire
+      setModal("inscription");
+    } else if (id === "inscription" && role === "admin") {
+      setModal("inscription");
+    } else if (id === "liste") {
+      setModal("liste");
+    } else if (id === "paiements") {
+      setSelectedEleveId("");
+      setMontantPaiement("");
+      setObservationPaiement("");
+      setModal("paiements");
+    } else if (id === "statistiques" && role === "admin") {
+      setModal("statistiques");
+    } else {
+      showToast("Accès limité", "Cette fonctionnalité est réservée à l'administrateur", "warning");
+    }
+  };
+
+  return (
+    <div>
+      <div style={S.pageHeader}>
+        <div>
+          <h1 style={S.pageTitle}>Arts Martiaux</h1>
+          <div style={S.pageSubtitle}>Gestion des inscriptions et paiements</div>
+        </div>
+        <span style={S.roleBadge(role)}>{role === "admin" ? "🔓 Admin" : "👤 Staff"}</span>
+      </div>
+
+<div
+  className="dashboard-grid arts-dashboard-grid"
+  style={{
+    marginBottom: 24,
+    justifyContent: "center"
+  }}
+>
+        {CARDS.map((card) => {
+          const isDisabled = card.id === "statistiques" && role !== "admin";
+          return (
+            <div
+              key={card.id}
+style={{
+    ...S.card,
+    width: "100%",
+                padding: "28px 18px",
+                textAlign: "center",
+                cursor: isDisabled ? "not-allowed" : "pointer",
+                opacity: isDisabled ? 0.4 : 1,
+                transition: "all 0.2s ease",
+                borderColor: isDisabled ? T.border : T.border2,
+                boxShadow: isDisabled ? "none" : "0 2px 8px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.02)",
+                transform: "translateY(0)",
+                "@media(max-width:768px)": {
+                  padding: "18px 12px",
+                }
+              }}
+              onMouseEnter={(e) => {
+                if (!isDisabled) {
+                  e.currentTarget.style.borderColor = card.color;
+                  e.currentTarget.style.boxShadow = `0 4px 20px rgba(0,0,0,0.5), 0 0 0 2px ${card.color}44`;
+                  e.currentTarget.style.transform = "translateY(-2px)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isDisabled) {
+                  e.currentTarget.style.borderColor = T.border2;
+                  e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.02)";
+                  e.currentTarget.style.transform = "translateY(0)";
+                }
+              }}
+              onClick={() => !isDisabled && handleCardClick(card.id)}
+            >
+              <div style={{ fontSize: 40, marginBottom: 10 }}>{card.icon}</div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: T.text }}>{card.label}</div>
+              {isDisabled && (
+                <div style={{ fontSize: 10, color: T.textDim, marginTop: 6 }}>🔒 Admin uniquement</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Contenu contextuel selon la modal ouverte */}
+      <Modal
+        open={!!modal}
+        onClose={() => setModal(null)}
+        title={
+          modal === "inscription" ? "🥋 Nouvelle inscription" :
+          modal === "liste" ? "👥 Liste des élèves" :
+          modal === "paiements" ? "💰 Paiements du mois" :
+          modal === "statistiques" ? "📈 Statistiques" :
+          modal === "fiche" ? "👤 Fiche élève" : ""
+        }
+        maxWidth={modal === "liste" ? 600 : modal === "fiche" ? 480 : 440}
+      >
+        {modal === "inscription" && (
+          <div style={{ padding: "4px 0" }}>
+            <div style={{ color: T.textDim, fontSize: 13, marginBottom: 16 }}>
+              Formulaire d'inscription aux arts martiaux
+            </div>
+            <Inp 
+              label="Nom complet *" 
+              placeholder="Ex: Mamadou Diallo" 
+              value={form.nom}
+              onChange={e => setForm({ ...form, nom: e.target.value })}
+            />
+            <Inp 
+              label="Téléphone" 
+              placeholder="+224 620 000 000" 
+              type="tel"
+              value={form.telephone}
+              onChange={e => setForm({ ...form, telephone: e.target.value })}
+            />
+            <Inp 
+              label="Âge" 
+              placeholder="Ex: 25" 
+              type="number"
+              value={form.age}
+              onChange={e => setForm({ ...form, age: e.target.value })}
+            />
+            <Sel 
+              label="Sexe"
+              value={form.sexe}
+              onChange={e => setForm({ ...form, sexe: e.target.value })}
+            >
+              <option value="">Sélectionner...</option>
+              <option value="M">Masculin</option>
+              <option value="F">Féminin</option>
+            </Sel>
+            <Sel 
+              label="Discipline"
+              value={form.discipline}
+              onChange={e => setForm({ ...form, discipline: e.target.value })}
+            >
+              <option value="">Sélectionner...</option>
+              <option value="Kick-Boxing">Kick-Boxing</option>
+              <option value="Boxe">Boxe</option>
+              <option value="Lutte">Lutte</option>
+              <option value="Judo">Judo</option>
+            </Sel>
+            <Inp 
+              label="Date d'inscription" 
+              type="date" 
+              value={form.date_inscription}
+              onChange={e => setForm({ ...form, date_inscription: e.target.value })}
+            />
+            <button
+              style={{ ...S.btn("primary"), width: "100%", justifyContent: "center", padding: "11px", marginTop: 8 }}
+              onClick={handleInscription}
+              disabled={saving}
+            >
+              {saving ? "Enregistrement..." : "Enregistrer l'inscription"}
+            </button>
+          </div>
+        )}
+
+        {modal === "liste" && (
+  <div>
+
+{(() => {
+const now = new Date();
+const moisActuel = now.getMonth() + 1;
+const anneeActuelle = now.getFullYear();
+
+              const filteredEleves = eleves.filter(e => 
+                e.nom.toLowerCase().includes(searchList.toLowerCase()) ||
+                e.telephone.includes(searchList) ||
+                e.discipline.toLowerCase().includes(searchList.toLowerCase())
+              );
+
+              const getPaiementMois = (eleveId) => {
+                return paiements.find(p => 
+                  p.eleve_id === eleveId && 
+                  p.mois === moisActuel && 
+                  p.annee === anneeActuelle
+                );
+              };
+
+              return (
+                <>
+                  <SearchBar 
+                    value={searchList} 
+                    onChange={setSearchList} 
+                    placeholder="Rechercher par nom, téléphone ou discipline..." 
+                  />
+
+                  {loading ? (
+                    <div style={{ textAlign: "center", padding: "20px 0", color: T.textDim }}>
+                      Chargement des élèves...
+                    </div>
+                  ) : filteredEleves.length === 0 ? (
+                    <div style={{ color: T.textDim, fontSize: 12, textAlign: "center", padding: "20px 0" }}>
+                      {eleves.length === 0 ? (
+                        <>
+                          Aucun élève inscrit pour le moment.
+                          <br />
+                          <span style={{ fontSize: 10, color: T.textFaint }}>Cliquez sur "Nouvelle inscription" pour commencer.</span>
+                        </>
+                      ) : (
+                        "Aucun élève ne correspond à votre recherche."
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ maxHeight: 400, overflowY: "auto" }}>
+                      {filteredEleves.map((e, idx) => {
+                        const paiementsEleve = getPaiementsByEleve(e.id);
+                        const totalPaye = paiementsEleve.reduce((sum, p) => sum + (p.montant || 0), 0);
+                        const dernierPaiement = paiementsEleve.length > 0 ? paiementsEleve[0] : null;
+                        const paiementMois = getPaiementMois(e.id);
+                        const estPayeCeMois = !!paiementMois;
+
+                        return (
+                          <div 
+                            key={e.id} 
+                            style={{
+                              ...S.alertRow,
+                              borderLeft: `3px solid ${estPayeCeMois ? T.green : T.orange}`,
+                              cursor: "pointer",
+                              background: !estPayeCeMois && role === "admin" ? "rgba(251, 146, 60, 0.05)" : "transparent",
+                            }}
+                            onClick={() => {
+  setSelectedEleve(e);
+  setModal("fiche");
+}}
+                          >
+                            <Avatar name={e.nom} idx={idx} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>
+                                {e.nom}
+                                {!estPayeCeMois && role === "admin" && (
+                                  <span style={{ fontSize: 9, color: T.orange, marginLeft: 8 }}>
+                                    ⚠ Non payé ce mois
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: 10, color: T.textDim }}>
+                                {e.discipline} · {e.age || "?"} ans · {e.telephone || "Pas de tél."}
+                              </div>
+                              <div style={{ fontSize: 9, color: totalPaye > 0 ? T.green : T.orange, marginTop: 2 }}>
+                                {totalPaye > 0 ? `Total payé : ${fmtGNF(totalPaye)}` : "Aucun paiement"}
+                                {dernierPaiement && ` · Dernier : ${fmtDate(dernierPaiement.date_paiement)}`}
+                              </div>
+                            </div>
+<div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+  {role === "admin" && (
+    <span
+      style={{
+        ...S.pill(estPayeCeMois ? T.green : T.orange),
+        fontSize: 8,
+        padding: "2px 8px",
+      }}
+    >
+      {estPayeCeMois ? "✓ Payé" : "⏳ En attente"}
+    </span>
+  )}
+
+  <div
+    style={S.iconBtn("info")}
+onClick={(ev) => {
+  ev.stopPropagation();
+  setSelectedEleve(e);
+}}
+    title="Voir la fiche"
+  >
+    👤
+  </div>
+
+  {role === "admin" && (
+    <div
+      style={S.iconBtn("danger")}
+      title="Supprimer l'élève"
+      onClick={async (ev) => {
+        ev.stopPropagation();
+
+        const ok = window.confirm(
+          `Supprimer définitivement ${e.nom} ?\n\nCette action supprimera également tous ses paiements.`
+        );
+
+        if (!ok) return;
+
+        try {
+          await deleteEleve(e.id);
+          showToast(
+            "Élève supprimé",
+            `${e.nom} a été supprimé avec succès.`,
+            "success"
+          );
+        } catch (err) {
+          showToast(
+            "Erreur",
+            "Impossible de supprimer cet élève.",
+            "error"
+          );
+        }
+      }}
+    >
+      🗑️
+    </div>
+  )}
+</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        )}
+        
+
+        {modal === "paiements" && (
+          <div>
+            {(() => {
+              const now = new Date();
+              const moisActuel = now.getMonth() + 1;
+              const anneeActuelle = now.getFullYear();
+
+              const handlePaiement = async () => {
+                if (!selectedEleveId) {
+                  showToast("Sélection requise", "Veuillez choisir un élève", "error");
+                  return;
+                }
+                if (!montantPaiement || parseFloat(montantPaiement) <= 0) {
+                  showToast("Montant invalide", "Veuillez saisir un montant valide", "error");
+                  return;
+                }
+
+                setPaiementSaving(true);
+                try {
+                  await addPaiement({
+                    eleve_id: selectedEleveId,
+                    mois: moisActuel,
+                    annee: anneeActuelle,
+                    date_paiement: new Date().toISOString().split("T")[0],
+                    montant: parseFloat(montantPaiement),
+                    observation: observationPaiement || `Paiement ${new Date(anneeActuelle, moisActuel - 1).toLocaleString("fr-FR", { month: "long" })} ${anneeActuelle}`,
+                  });
+                  setSelectedEleveId("");
+                  setMontantPaiement("");
+                  setObservationPaiement("");
+                  setModal(null);
+                  showToast("Paiement enregistré", "Le paiement a été synchronisé", "success");
+                } catch (err) {
+                  // L'erreur est déjà gérée dans le hook
+                } finally {
+                  setPaiementSaving(false);
+                }
+              };
+
+              const eleveSelectionne = eleves.find(e => e.id === selectedEleveId);
+              const paiementExistant = eleveSelectionne ? paiements.find(p => 
+                p.eleve_id === eleveSelectionne.id && 
+                p.mois === moisActuel && 
+                p.annee === anneeActuelle
+              ) : null;
+
+              return (
+                <div>
+                  <div style={{ color: T.textDim, fontSize: 13, marginBottom: 12 }}>
+                    Enregistrer un paiement pour le mois de <strong style={{ color: T.text }}>
+                      {new Date(anneeActuelle, moisActuel - 1).toLocaleString("fr-FR", { month: "long" })} {anneeActuelle}
+                    </strong>
+                  </div>
+
+                  <Sel 
+                    label="Élève *"
+                    value={selectedEleveId}
+                    onChange={e => setSelectedEleveId(e.target.value)}
+                  >
+                    <option value="">Sélectionner un élève...</option>
+                    {eleves.map(e => {
+                      const dejaPaye = paiements.some(p => 
+                        p.eleve_id === e.id && 
+                        p.mois === moisActuel && 
+                        p.annee === anneeActuelle
+                      );
+                      return (
+                        <option key={e.id} value={e.id}>
+                          {e.nom} - {e.discipline}
+                          {dejaPaye && " ✅ Payé"}
+                        </option>
+                      );
+                    })}
+                  </Sel>
+
+                  {selectedEleveId && eleveSelectionne && (
+                    <>
+                      <div style={{ 
+                        background: paiementExistant ? T.greenDark : T.surface2, 
+                        border: `1px solid ${paiementExistant ? T.greenBd : T.border}`,
+                        borderRadius: 8, 
+                        padding: "10px 13px", 
+                        marginBottom: 12,
+                        fontSize: 12,
+                        color: paiementExistant ? T.green : T.textDim
+                      }}>
+                        {paiementExistant ? (
+                          <span>✅ Ce mois est déjà payé pour <strong style={{ color: T.text }}>{eleveSelectionne.nom}</strong></span>
+                        ) : (
+                          <span>💳 Paiement à enregistrer pour <strong style={{ color: T.text }}>{eleveSelectionne.nom}</strong></span>
+                        )}
+                      </div>
+
+                      <Inp 
+                        label="Montant *"
+                        type="number"
+                        placeholder="Ex: 50000"
+                        value={montantPaiement}
+                        onChange={e => setMontantPaiement(e.target.value)}
+                        disabled={!!paiementExistant}
+                      />
+
+                      <Inp 
+                        label="Observation (optionnel)"
+                        placeholder="Ex: Paiement janvier"
+                        value={observationPaiement}
+                        onChange={e => setObservationPaiement(e.target.value)}
+                        disabled={!!paiementExistant}
+                      />
+
+                      <button
+                        style={{ 
+                          ...S.btn("primary"), 
+                          width: "100%", 
+                          justifyContent: "center", 
+                          padding: "11px", 
+                          marginTop: 8,
+                          opacity: paiementExistant || paiementSaving ? 0.6 : 1,
+                          cursor: paiementExistant || paiementSaving ? "not-allowed" : "pointer",
+                        }}
+                        onClick={handlePaiement}
+                        disabled={!!paiementExistant || paiementSaving || !selectedEleveId || !montantPaiement}
+                      >
+                        {paiementExistant ? "✓ Déjà payé ce mois" : paiementSaving ? "Enregistrement..." : "💾 Enregistrer le paiement"}
+                      </button>
+                    </>
+                  )}
+
+                  {eleves.length === 0 && (
+                    <div style={{ color: T.textDim, fontSize: 12, textAlign: "center", padding: "20px 0" }}>
+                      Aucun élève inscrit.
+                      <br />
+                      <span style={{ fontSize: 10, color: T.textFaint }}>Cliquez sur "Nouvelle inscription" pour commencer.</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {modal === "statistiques" && role === "admin" && (
+          <div>
+            {(() => {
+              const now = new Date();
+              const moisActuel = now.getMonth() + 1;
+              const anneeActuelle = now.getFullYear();
+
+              // Statistiques globales
+              const totalEleves = eleves.length;
+              const totalPaiements = paiements.length;
+              const totalEncaisse = getTotalPaiements();
+              
+              // Statistiques du mois
+              const paiementsMois = getPaiementsDuMois(moisActuel, anneeActuelle);
+              const totalMois = getMontantDuMois(moisActuel, anneeActuelle);
+              const elevesPayesMois = new Set(paiementsMois.map(p => p.eleve_id)).size;
+
+              // Répartition par discipline
+              const disciplineStats = {};
+              eleves.forEach(e => {
+                disciplineStats[e.discipline] = (disciplineStats[e.discipline] || 0) + 1;
+              });
+
+              // Derniers paiements (5 derniers)
+              const derniersPaiements = [...paiements]
+                .sort((a, b) => new Date(b.date_paiement) - new Date(a.date_paiement))
+                .slice(0, 5);
+
+              return (
+                <div>
+                  {/* KPIs principaux */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+                    <div style={{ background: T.surface2, padding: "14px", borderRadius: 10, border: `1px solid ${T.border}` }}>
+                      <div style={{ fontSize: 9, color: T.textDim, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>
+                        Élèves inscrits
+                      </div>
+                      <div style={{ fontSize: 22, fontWeight: 900, color: T.text }}>{totalEleves}</div>
+                    </div>
+                    <div style={{ background: T.surface2, padding: "14px", borderRadius: 10, border: `1px solid ${T.border}` }}>
+                      <div style={{ fontSize: 9, color: T.textDim, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>
+                        Total encaissé
+                      </div>
+                      <div style={{ fontSize: 22, fontWeight: 900, color: T.green }}>{fmtGNF(totalEncaisse)}</div>
+                    </div>
+                    <div style={{ background: T.surface2, padding: "14px", borderRadius: 10, border: `1px solid ${T.border}` }}>
+                      <div style={{ fontSize: 9, color: T.textDim, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>
+                        Paiements total
+                      </div>
+                      <div style={{ fontSize: 22, fontWeight: 900, color: T.blue }}>{totalPaiements}</div>
+                    </div>
+                  </div>
+
+                  {/* Statistiques du mois */}
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10, fontWeight: 700 }}>
+                      Mois en cours - {new Date(anneeActuelle, moisActuel - 1).toLocaleString("fr-FR", { month: "long" })} {anneeActuelle}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                      <div style={{ background: T.greenDark, border: `1px solid ${T.greenBd}`, borderRadius: 10, padding: "12px 14px" }}>
+                        <div style={{ fontSize: 8, color: "#2d7d4d", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>
+                          Encaissé
+                        </div>
+                        <div style={{ fontWeight: 900, color: T.green, fontSize: 18 }}>{fmtGNF(totalMois)}</div>
+                      </div>
+                      <div style={{ background: T.blueDark, border: `1px solid ${T.blueBd}`, borderRadius: 10, padding: "12px 14px" }}>
+                        <div style={{ fontSize: 8, color: "#2d4d7d", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>
+                          Paiements
+                        </div>
+                        <div style={{ fontWeight: 900, color: T.blue, fontSize: 18 }}>{paiementsMois.length}</div>
+                      </div>
+                      <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px" }}>
+                        <div style={{ fontSize: 8, color: T.textDim, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>
+                          Élèves payés
+                        </div>
+                        <div style={{ fontWeight: 900, color: T.text, fontSize: 18 }}>{elevesPayesMois} / {totalEleves}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Répartition par discipline */}
+                  {Object.keys(disciplineStats).length > 0 && (
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8, fontWeight: 700 }}>
+                        Répartition par discipline
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        {Object.entries(disciplineStats).map(([discipline, count], idx) => {
+                          const colors = ["#4ade80", "#60a5fa", "#f472b6", "#fb923c", "#a78bfa", "#34d399"];
+                          const color = colors[idx % colors.length];
+                          return (
+                            <span 
+                              key={discipline}
+                              style={{
+                                ...S.pill(color),
+                                padding: "4px 12px",
+                                fontSize: 11,
+                                background: color + "18",
+                                border: `1px solid ${color}44`,
+                              }}
+                            >
+                              {discipline} : {count} {count > 1 ? "élèves" : "élève"}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Derniers paiements */}
+                  {derniersPaiements.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8, fontWeight: 700 }}>
+                        Derniers paiements
+                      </div>
+                      <div style={{ maxHeight: 150, overflowY: "auto" }}>
+                        {derniersPaiements.map(p => {
+                          const eleve = eleves.find(e => e.id === p.eleve_id);
+                          return (
+                            <div 
+                              key={p.id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                padding: "6px 10px",
+                                background: T.surface2,
+                                borderRadius: 6,
+                                marginBottom: 3,
+                                border: `1px solid ${T.border}`,
+                                fontSize: 11,
+                              }}
+                            >
+                              <div>
+                                <span style={{ fontWeight: 600, color: T.text }}>
+                                  {eleve ? eleve.nom : "Élève inconnu"}
+                                </span>
+                                <span style={{ color: T.textDim, marginLeft: 6 }}>
+                                  {new Date(p.annee, p.mois - 1).toLocaleString("fr-FR", { month: "short" })} {p.annee}
+                                </span>
+                              </div>
+                              <span style={{ color: T.green, fontWeight: 700 }}>
+                                +{fmtGNF(p.montant)}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {totalEleves === 0 && (
+                    <div style={{ color: T.textDim, fontSize: 12, textAlign: "center", padding: "20px 0" }}>
+                      Aucune donnée disponible pour le moment.
+                      <br />
+                      <span style={{ fontSize: 10, color: T.textFaint }}>Commencez par ajouter des inscriptions.</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {modal === "fiche" && selectedEleve && (
+          <div>
+            {(() => {
+              const now = new Date();
+              const moisActuel = now.getMonth() + 1;
+              const anneeActuelle = now.getFullYear();
+              
+              const paiementsEleve = getPaiementsByEleve(selectedEleve.id);
+              const totalPaye = paiementsEleve.reduce((sum, p) => sum + (p.montant || 0), 0);
+              const paiementMois = paiementsEleve.find(p => 
+                p.mois === moisActuel && p.annee === anneeActuelle
+              );
+              const estPayeCeMois = !!paiementMois;
+              const dernierPaiement = paiementsEleve.length > 0 ? paiementsEleve[0] : null;
+
+              return (
+                <div>
+                  {/* En-tête avec avatar et nom */}
+                  <div style={{ 
+                    display: "flex", 
+                    alignItems: "center", 
+                    gap: 14, 
+                    marginBottom: 16,
+                    paddingBottom: 14,
+                    borderBottom: `1px solid ${T.border}`
+                  }}>
+                    <Avatar name={selectedEleve.nom} idx={0} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 800, fontSize: 17, color: T.text }}>
+                        {selectedEleve.nom}
+                        {!estPayeCeMois && role === "admin" && (
+                          <span style={{ fontSize: 11, color: T.orange, marginLeft: 10 }}>
+                            ⚠ Non payé ce mois
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 12, color: T.textDim }}>
+                        {selectedEleve.discipline} · {selectedEleve.age || "?"} ans · {selectedEleve.telephone || "Pas de tél."}
+                      </div>
+                      <div style={{ fontSize: 11, color: T.textDim, marginTop: 3 }}>
+                        Inscrit le {fmtDate(selectedEleve.date_inscription)}
+                      </div>
+                    </div>
+                    <span style={S.pill(estPayeCeMois ? T.green : T.orange)}>
+                      {estPayeCeMois ? "✓ Payé ce mois" : "⏳ En attente"}
+                    </span>
+                  </div>
+
+                  {/* Statistiques rapides */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+                    <div style={{ background: T.greenDark, border: `1px solid ${T.greenBd}`, borderRadius: 10, padding: "12px 14px" }}>
+                      <div style={{ fontSize: 9, color: "#2d7d4d", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>
+                        Total payé
+                      </div>
+                      <div style={{ fontWeight: 900, color: T.green, fontSize: 18 }}>{fmtGNF(totalPaye)}</div>
+                    </div>
+                    <div style={{ background: T.surface2, border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px" }}>
+                      <div style={{ fontSize: 9, color: T.textDim, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>
+                        Paiements
+                      </div>
+                      <div style={{ fontWeight: 700, color: T.text, fontSize: 18 }}>{paiementsEleve.length}</div>
+                      {dernierPaiement && (
+                        <div style={{ fontSize: 10, color: T.textDim, marginTop: 3 }}>
+                          Dernier : {fmtDate(dernierPaiement.date_paiement)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Historique des paiements */}
+                  <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10, fontWeight: 700 }}>
+                    Historique des paiements
+                  </div>
+
+                  {paiementsEleve.length === 0 ? (
+                    <div style={{ color: T.textFaint, fontSize: 12, fontStyle: "italic", textAlign: "center", padding: "16px 0" }}>
+                      Aucun paiement enregistré pour cet élève.
+                    </div>
+                  ) : (
+                    <div style={{ maxHeight: 200, overflowY: "auto" }}>
+                      {paiementsEleve.map(p => (
+                        <div 
+                          key={p.id} 
+                          style={{ 
+                            display: "flex", 
+                            alignItems: "center", 
+                            justifyContent: "space-between", 
+                            padding: "8px 12px", 
+                            background: T.surface2, 
+                            borderRadius: 8, 
+                            marginBottom: 4,
+                            border: `1px solid ${T.border}`
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 12, color: T.text }}>
+                              {new Date(p.annee, p.mois - 1).toLocaleString("fr-FR", { month: "long" })} {p.annee}
+                            </div>
+                            <div style={{ fontSize: 10, color: T.textDim }}>
+                              {fmtDate(p.date_paiement)} {p.observation ? `· ${p.observation}` : ""}
+                            </div>
+                          </div>
+                          <span style={{ color: T.green, fontWeight: 800, fontSize: 13 }}>
+                            {fmtGNF(p.montant)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div style={{ 
+                    marginTop: 16, 
+                    paddingTop: 14, 
+                    borderTop: `1px solid ${T.border}`,
+                    display: "flex",
+                    gap: 8,
+                    flexWrap: "wrap"
+                  }}>
+                    {/* Bouton WhatsApp */}
+                    <WaBtn 
+                      phone={selectedEleve.telephone} 
+                      message={`Bonjour ${selectedEleve.nom.split(" ")[0]}, nous vous contactons depuis le Gym Nouvel Élan - Arts Martiaux. Comment allez-vous ? 💪`} 
+                    />
+
+                    {/* Bouton Gérer les paiements (admin uniquement) */}
+                    {role === "admin" && (
+                      <button 
+                        style={{ ...S.btn("primary"), flex: 1 }}
+                        onClick={() => {
+                          setSelectedEleveId(selectedEleve.id);
+                          setModal("paiements");
+                        }}
+                      >
+                        💰 Gérer les paiements
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+// ═══════════════════════════════════════════════════════════════════
+// 19. VUE GESTION GLOBALE
+// ═══════════════════════════════════════════════════════════════════
+
+function GestionGlobaleView({ gymCaisse, artsPaiements, clients, abonnements, eleves, now }) {
+  const { role } = useAuth();
+  const showToast = useToast();
+  
+  const [filterSource, setFilterSource] = useState("all"); // "all" | "gym" | "arts"
+  const [period, setPeriod] = useState("today"); // "today" | "week" | "month" | "custom"
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [viewMode, setViewMode] = useState("summary"); // "summary" | "details"
+
+  // Seul l'admin peut accéder
+  if (role !== "admin") {
+    return (
+      <div>
+        <h1 style={S.pageTitle}>Gestion globale</h1>
+        <div style={{ ...S.card, padding: "40px 24px", textAlign: "center" }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
+          <div style={{ fontWeight: 700, color: T.textMid }}>Accès réservé à l'administrateur</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Normalisation des données de la caisse gym
+  const gymTransactions = gymCaisse.map(t => ({
+    ...t,
+    source: "gym",
+    date: t.date,
+    montant: t.montant,
+    description: t.description,
+    id: t.id,
+  }));
+
+  // Normalisation des données arts martiaux
+  const artsTransactions = artsPaiements.map(p => {
+    const eleve = eleves.find(e => e.id === p.eleve_id);
+    return {
+      ...p,
+      source: "arts",
+      date: p.date_paiement,
+      montant: p.montant,
+      description: `${eleve ? eleve.nom : "Élève"} - ${new Date(p.annee, p.mois - 1).toLocaleString("fr-FR", { month: "long" })} ${p.annee}`,
+      id: p.id,
+    };
+  });
+
+  // Fusion des transactions
+  const allTransactions = [...gymTransactions, ...artsTransactions];
+
+  // Filtrage par source
+  const filteredBySource = allTransactions.filter(t => {
+    if (filterSource === "all") return true;
+    return t.source === filterSource;
+  });
+
+  // Filtrage par période
+  const getDateFilter = () => {
+    const nowDate = new Date(now);
+    const todayStr = nowDate.toISOString().split("T")[0];
+    
+    switch (period) {
+      case "today":
+        return { from: todayStr, to: todayStr };
+      case "week": {
+        const weekStart = new Date(nowDate);
+        weekStart.setDate(nowDate.getDate() - 7);
+        return { from: weekStart.toISOString().split("T")[0], to: todayStr };
+      }
+      case "month": {
+        const monthStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1);
+        return { from: monthStart.toISOString().split("T")[0], to: todayStr };
+      }
+      case "custom":
+        return { from: dateFrom || todayStr, to: dateTo || todayStr };
+      default:
+        return { from: todayStr, to: todayStr };
+    }
+  };
+
+  const dateFilter = getDateFilter();
+
+  // Filtrage final
+  const filteredTransactions = filteredBySource.filter(t => {
+    const tDate = t.date.split("T")[0];
+    return tDate >= dateFilter.from && tDate <= dateFilter.to;
+  });
+
+  // Statistiques
+  const stats = useMemo(() => {
+    const totalGym = filteredTransactions.filter(t => t.source === "gym").reduce((sum, t) => sum + t.montant, 0);
+    const totalArts = filteredTransactions.filter(t => t.source === "arts").reduce((sum, t) => sum + t.montant, 0);
+    const totalAll = totalGym + totalArts;
+    const count = filteredTransactions.length;
+
+    // Transactions par jour
+    const byDay = {};
+    filteredTransactions.forEach(t => {
+      const day = t.date.split("T")[0];
+      if (!byDay[day]) byDay[day] = { gym: 0, arts: 0, total: 0 };
+      byDay[day][t.source] = (byDay[day][t.source] || 0) + t.montant;
+      byDay[day].total += t.montant;
+    });
+
+    const days = Object.keys(byDay).sort();
+    const chartData = days.map(day => ({
+      day,
+      gym: byDay[day].gym || 0,
+      arts: byDay[day].arts || 0,
+      total: byDay[day].total || 0,
+    }));
+
+    return { totalGym, totalArts, totalAll, count, chartData };
+  }, [filteredTransactions]);
+
+  // Dernières transactions (10 dernières)
+  const recentTransactions = [...filteredTransactions]
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 10);
+
+  const sourceLabels = {
+    all: "Toutes les sources",
+    gym: "Gym",
+    arts: "Arts martiaux",
+  };
+
+  const periodLabels = {
+    today: "Aujourd'hui",
+    week: "7 derniers jours",
+    month: "Ce mois",
+    custom: "Période personnalisée",
+  };
+
+  return (
+    <div>
+      <div style={S.pageHeader}>
+        <div>
+          <h1 style={S.pageTitle}>📊 Gestion globale</h1>
+          <div style={S.pageSubtitle}>
+            Vue consolidée des revenus - {filteredTransactions.length} transactions
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <span style={S.roleBadge("admin")}>🔓 Admin</span>
+        </div>
+      </div>
+
+      {/* Filtres */}
+      <div style={{ 
+        ...S.card, 
+        padding: "16px 18px", 
+        marginBottom: 20,
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 12,
+        alignItems: "center",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 11, color: T.textDim, fontWeight: 600 }}>Source :</span>
+          {["all", "gym", "arts"].map(src => (
+            <span
+              key={src}
+              style={{
+                ...S.fPill(filterSource === src),
+                padding: "4px 12px",
+                fontSize: 11,
+                cursor: "pointer",
+              }}
+              onClick={() => setFilterSource(src)}
+            >
+              {sourceLabels[src]}
+            </span>
+          ))}
+        </div>
+
+        <div style={{ width: 1, height: 24, background: T.border }} />
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, color: T.textDim, fontWeight: 600 }}>Période :</span>
+          {["today", "week", "month", "custom"].map(p => (
+            <span
+              key={p}
+              style={{
+                ...S.fPill(period === p),
+                padding: "4px 12px",
+                fontSize: 11,
+                cursor: "pointer",
+              }}
+              onClick={() => setPeriod(p)}
+            >
+              {periodLabels[p]}
+            </span>
+          ))}
+        </div>
+
+        {period === "custom" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={e => setDateFrom(e.target.value)}
+              style={{ ...S.input, width: "auto", padding: "5px 8px", fontSize: 11 }}
+            />
+            <span style={{ color: T.textDim, fontSize: 11 }}>→</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={e => setDateTo(e.target.value)}
+              style={{ ...S.input, width: "auto", padding: "5px 8px", fontSize: 11 }}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* KPIs */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 }}>
+        <div style={{ ...S.kpiCard }}>
+          <div style={S.kpiBar(T.green)} />
+          <div style={S.kpiLabel}>Total global</div>
+          <div style={{ ...S.kpiValue, color: T.green }}>{fmtGNF(stats.totalAll)}</div>
+          <div style={S.kpiSub}>{stats.count} transaction(s)</div>
+        </div>
+        <div style={{ ...S.kpiCard }}>
+          <div style={S.kpiBar(T.blue)} />
+          <div style={S.kpiLabel}>Gym</div>
+          <div style={{ ...S.kpiValue, color: T.blue }}>{fmtGNF(stats.totalGym)}</div>
+          <div style={S.kpiSub}>
+            {stats.totalAll > 0 ? ((stats.totalGym / stats.totalAll) * 100).toFixed(1) : 0}% du total
+          </div>
+        </div>
+        <div style={{ ...S.kpiCard }}>
+          <div style={S.kpiBar(T.orange)} />
+          <div style={S.kpiLabel}>Arts martiaux</div>
+          <div style={{ ...S.kpiValue, color: T.orange }}>{fmtGNF(stats.totalArts)}</div>
+          <div style={S.kpiSub}>
+            {stats.totalAll > 0 ? ((stats.totalArts / stats.totalAll) * 100).toFixed(1) : 0}% du total
+          </div>
+        </div>
+        <div style={{ ...S.kpiCard }}>
+          <div style={S.kpiBar(T.purple)} />
+          <div style={S.kpiLabel}>Moyenne / jour</div>
+          <div style={{ ...S.kpiValue, color: T.purple }}>
+            {fmtGNF(stats.chartData.length > 0 ? stats.totalAll / stats.chartData.length : 0)}
+          </div>
+          <div style={S.kpiSub}>sur {stats.chartData.length} jour(s)</div>
+        </div>
+      </div>
+
+      {/* Graphique */}
+      <div style={{ ...S.card, marginBottom: 20 }}>
+        <div style={S.cardHead}>
+          <span style={S.cardTitle}>📈 Évolution des revenus</span>
+          <div style={{ display: "flex", gap: 12, fontSize: 10, color: T.textDim }}>
+            <span><span style={{ display: "inline-block", width: 12, height: 12, background: T.blue, borderRadius: 2, marginRight: 4 }} /> Gym</span>
+            <span><span style={{ display: "inline-block", width: 12, height: 12, background: T.orange, borderRadius: 2, marginRight: 4 }} /> Arts martiaux</span>
+          </div>
+        </div>
+        <div style={{ padding: "16px 18px", overflowX: "auto" }}>
+          {stats.chartData.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "30px 0", color: T.textDim }}>
+              Aucune donnée pour cette période
+            </div>
+          ) : (
+            <div style={{ minWidth: 400 }}>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 180 }}>
+                {stats.chartData.map((day, idx) => {
+                  const maxVal = Math.max(...stats.chartData.map(d => d.total), 1);
+                  const gymHeight = (day.gym / maxVal) * 140;
+                  const artsHeight = (day.arts / maxVal) * 140;
+                  const totalHeight = (day.total / maxVal) * 140;
+
+                  return (
+                    <div key={idx} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                      <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 150 }}>
+                        {day.gym > 0 && (
+                          <div 
+                            style={{ 
+                              width: 16, 
+                              height: Math.max(gymHeight, 2), 
+                              background: T.blue, 
+                              borderRadius: "2px 2px 0 0",
+                              opacity: filterSource === "arts" ? 0.3 : 1,
+                              transition: "height 0.3s",
+                            }}
+                            title={`Gym: ${fmtGNF(day.gym)}`}
+                          />
+                        )}
+                        {day.arts > 0 && (
+                          <div 
+                            style={{ 
+                              width: 16, 
+                              height: Math.max(artsHeight, 2), 
+                              background: T.orange, 
+                              borderRadius: "2px 2px 0 0",
+                              opacity: filterSource === "gym" ? 0.3 : 1,
+                              transition: "height 0.3s",
+                            }}
+                            title={`Arts: ${fmtGNF(day.arts)}`}
+                          />
+                        )}
+                      </div>
+                      <div style={{ fontSize: 8, color: T.textDim, textAlign: "center", maxWidth: 40, overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {day.day.split("-").slice(1).join("/")}
+                      </div>
+                      <div style={{ fontSize: 7, color: T.textFaint, fontWeight: 700 }}>
+                        {fmtGNF(day.total)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Dernières transactions */}
+      <div style={S.card}>
+        <div style={S.cardHead}>
+          <span style={S.cardTitle}>📋 Dernières transactions</span>
+          <span style={{ fontSize: 10, color: T.textDim }}>{recentTransactions.length} affichées</span>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ ...S.table, minWidth: 500 }}>
+            <thead>
+              <tr>
+                <th style={S.th}>Date</th>
+                <th style={S.th}>Description</th>
+                <th style={S.th}>Source</th>
+                <th style={{ ...S.th, textAlign: "right" }}>Montant</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentTransactions.length === 0 ? (
+                <tr><td colSpan={4}><div style={S.emptyState}>Aucune transaction</div></td></tr>
+              ) : (
+                recentTransactions.map(t => (
+                  <tr key={t.id}>
+                    <td style={{ ...S.td, color: T.textDim, whiteSpace: "nowrap", fontSize: 11 }}>
+                      {fmtDate(t.date)}
+                    </td>
+                    <td style={{ ...S.td, fontSize: 12, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {t.description}
+                    </td>
+                    <td style={S.td}>
+                      <span style={S.pill(t.source === "gym" ? T.blue : T.orange)}>
+                        {t.source === "gym" ? "🏋️ Gym" : "🥋 Arts"}
+                      </span>
+                    </td>
+                    <td style={{ ...S.td, textAlign: "right", color: T.green, fontWeight: 700, whiteSpace: "nowrap" }}>
+                      +{fmtGNF(t.montant)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
 // ═══════════════════════════════════════════════════════════════════
 // 19. SIDEBAR
 // ═══════════════════════════════════════════════════════════════════
 
-function Sidebar({ view, setView, alertCount, syncing, offline, lastSync, onRefresh, onLogout }) {
+function Sidebar({ view, setView, alertCount, syncing, offline, lastSync, onRefresh, onLogout, mobileOpen, onCloseMobile }) {
   const { role, displayName } = useAuth();
 
   const NAV = [
@@ -1899,12 +3423,14 @@ function Sidebar({ view, setView, alertCount, syncing, offline, lastSync, onRefr
     { id: "clients",     label: "Clients",          icon: "👥" },
     { id: "abonnements", label: "Abonnements",       icon: "📋" },
     { id: "seances",     label: "Séances directes",  icon: "⏱" },
+    { id: "artsMartiaux", label: "Arts Martiaux", icon: "🥋" },
+    ...(role === "admin" ? [{ id: "gestionGlobale", label: "Gestion globale", icon: "📊" }] : []),
     ...(can(role, "view_caisse") ? [{ id: "caisse", label: "Caisse", icon: "💰" }] : []),
     ...(role === "admin" ? [{ id: "parametres", label: "Paramètres", icon: "⚙️" }] : []),
   ];
 
   return (
-    <aside style={S.sidebar}>
+    <aside style={S.sidebar} className={mobileOpen ? "sidebar-open" : ""}>
       {/* Logo */}
       <div style={S.logo}>
         <div style={S.logoSub}>Gym Management</div>
@@ -1961,6 +3487,7 @@ function Sidebar({ view, setView, alertCount, syncing, offline, lastSync, onRefr
 export default function App() {
   const [user, setUser] = useState(() => loadSession());
   const [view, setView] = useState("dashboard");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [now, setNow] = useState(new Date());
 
   // Toast manager
@@ -1981,6 +3508,15 @@ export default function App() {
     loading, syncing, offline, lastSync,
     loadData,
   } = useGymData(showToast);
+
+  // Données arts martiaux (pour la gestion globale)
+  const {
+    eleves,
+    paiements,
+  } = useArtsMartiauxData(showToast);
+
+  // Récupération des paramètres (pour le thème)
+  const { settings, updateFlatSetting, resetToDefaults } = useSettings();
 
   // Compteur alertes pour badge sidebar
   const alertCount = useMemo(() =>
@@ -2052,15 +3588,37 @@ export default function App() {
     try { await apiPost("deleteAbonnement", { id }); } catch {}
   }, [setAbonnements, showToast]);
 
-  const handleCheckIn = useCallback(async (aboId) => {
+const handleCheckIn = useCallback(async (aboId) => {
     const abo = abonnements.find(a => a.id === aboId);
-    if (!abo) return;
-    if (abo.seances_restantes <= 0) { showToast("Quota atteint", "Plus de séances disponibles", "error"); return; }
+
+    if (!abo) return false;
+
+    if (abo.seances_restantes <= 0) {
+        showToast("Quota atteint", "Plus de séances disponibles", "error");
+        return false;
+    }
+
     const newRestantes = abo.seances_restantes - 1;
-    setAbonnements(p => p.map(a => a.id === aboId ? { ...a, seances_restantes: newRestantes } : a));
+
+    setAbonnements(p =>
+        p.map(a =>
+            a.id === aboId
+                ? { ...a, seances_restantes: newRestantes }
+                : a
+        )
+    );
+
     showToast("Séance pointée", `${newRestantes} restante(s)`, "success");
-    try { await apiPost("checkIn", { id: aboId, seances_restantes: newRestantes }); } catch {}
-  }, [abonnements, setAbonnements, showToast]);
+
+    try {
+        await apiPost("checkIn", {
+            id: aboId,
+            seances_restantes: newRestantes
+        });
+    } catch {}
+
+    return true;
+}, [abonnements, setAbonnements, showToast]);
 
 // ── HANDLERS SÉANCES ───────────────────────────────────────────
 const handleStartSeance = useCallback(async (data) => {
@@ -2171,15 +3729,54 @@ const handleEndSeance = useCallback(async (id, sessionData) => {
   return (
     <AuthContext.Provider value={authValue}>
       <ToastContext.Provider value={showToast}>
+        <SettingsContext.Provider value={{ settings, updateFlatSetting, resetToDefaults }}>
         <style>{GLOBAL_CSS}</style>
 
-        <div style={S.app}>
+        <div style={S.app} className={`app${settings?.darkMode === false ? " light-mode" : ""}`}>
+          {/* Top Bar */}
+          <div style={S.topBar} className="top-bar">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", position: "relative" }}>
+              <button
+                className="mobile-hamburger"
+                onClick={() => setMobileMenuOpen(true)}
+                aria-label="Ouvrir le menu"
+              >☰</button>
+
+              {/* Nom centré */}
+              <span style={{
+                fontWeight: 800,
+                fontSize: 16,
+                color: T.text,
+                position: "absolute",
+                left: "50%",
+                transform: "translateX(-50%)",
+                whiteSpace: "nowrap"
+              }}>{CONFIG.APP_NAME}</span>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 12, color: T.textDim, display: "none", "@media(min-width:700px)": { display: "block" } }}>{user.displayName}</span>
+                <span style={S.roleBadge(user.role)}>{user.role === "admin" ? "Admin" : "Staff"}</span>
+                <button
+                  style={{ ...S.iconBtn("ghost"), width: 32, height: 32, fontSize: 16 }}
+                  onClick={handleLogout}
+                  title="Déconnexion"
+                >⏻</button>
+              </div>
+            </div>
+          </div>
+
+          {mobileMenuOpen && (
+            <div className="sidebar-overlay" onClick={() => setMobileMenuOpen(false)} />
+          )}
+
           <Sidebar
             view={view} setView={setView}
             alertCount={alertCount}
             syncing={syncing} offline={offline} lastSync={lastSync}
             onRefresh={() => loadData(true)}
             onLogout={handleLogout}
+            mobileOpen={mobileMenuOpen}
+            onCloseMobile={() => setMobileMenuOpen(false)}
           />
 
           <main style={S.main}>
@@ -2201,15 +3798,28 @@ const handleEndSeance = useCallback(async (id, sessionData) => {
                   {view === "abonnements" && (
                     <AbonnementsView abonnements={abonnements} clients={clients} now={now} syncing={syncing} onAdd={handleAddAbonnement} onDelete={handleDeleteAbonnement} onCheckIn={handleCheckIn} />
                   )}
-                  {view === "seances" && (
-                    <SeancesView seancesActives={seancesActives} clients={clients} now={now} onStart={handleStartSeance} onEnd={handleEndSeance} />
-                  )}
-                  {view === "caisse" && can(user.role, "view_caisse") && (
-                    <CaisseView caisse={caisse} now={now} syncing={syncing} />
-                  )}
-                  {view === "parametres" && user.role === "admin" && (
-                    <ParametresViewV2 />
-                  )}
+{view === "seances" && (
+  <SeancesView seancesActives={seancesActives} clients={clients} now={now} onStart={handleStartSeance} onEnd={handleEndSeance} />
+)}
+{view === "artsMartiaux" && (
+  <ArtsMartiauxView />
+)}
+{view === "gestionGlobale" && user.role === "admin" && (
+  <GestionGlobaleView 
+    gymCaisse={caisse}
+    artsPaiements={paiements}
+    clients={clients}
+    abonnements={abonnements}
+    eleves={eleves}
+    now={now}
+  />
+)}
+{view === "caisse" && can(user.role, "view_caisse") && (
+  <CaisseView caisse={caisse} now={now} syncing={syncing} />
+)}
+{view === "parametres" && user.role === "admin" && (
+  <ParametresViewV2 />
+)}
                 </div>
               )
             }
@@ -2217,6 +3827,7 @@ const handleEndSeance = useCallback(async (id, sessionData) => {
         </div>
 
         <ToastManager toasts={toasts} />
+        </SettingsContext.Provider>
       </ToastContext.Provider>
     </AuthContext.Provider>
   );
@@ -2261,18 +3872,414 @@ const GLOBAL_CSS = `
   /* Animations */
   .fade-in { animation: fadeIn 0.2s ease; }
 
+  /* Overlay pour sidebar mobile */
+  .sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 90;
+  }
+
+  /* Bouton hamburger dans la top bar */
+  .mobile-hamburger {
+    display: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: transparent;
+    border: none;
+    color: #e8e8e8;
+    font-size: 22px;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+  }
+
   /* Responsive Mobile */
   @media (max-width: 900px) {
-    aside { display: none !important; }
+    aside {
+      position: fixed !important;
+      top: 0;
+      left: 0;
+      z-index: 100;
+      width: 230px;
+      height: 100vh;
+      background: #111111;
+      border-right: 1px solid #1e1e1e;
+      transform: translateX(-100%);
+      transition: transform 0.25s ease;
+      box-shadow: 2px 0 20px rgba(0,0,0,0.5);
+    }
+    aside.sidebar-open {
+      transform: translateX(0);
+    }
     .main-inner { padding: 16px !important; }
+    .mobile-hamburger { display: flex; }
   }
-  @media (max-width: 700px) {
-    .kpi-grid { grid-template-columns: 1fr 1fr !important; }
+    /* Cacher la top bar sur PC (écrans larges) */
+  @media (min-width: 769px) {
+    .top-bar {
+      display: none !important;
+    }
+    /* Supprimer le padding-top du main sur PC pour compenser */
+    main {
+      padding-top: 0 !important;
+    }
+  }
+
+  /* ============================================================
+     CARTES KPI - FORCER 2 COLONNES SUR MOBILE
+     ============================================================ */
+  @media (max-width: 768px) {
+    /* Forcer la grille en 2 colonnes en écrasant le style inline */
+    .kpi-grid {
+      display: grid !important;
+      grid-template-columns: 1fr 1fr !important;
+      gap: 8px !important;
+      width: 100% !important;
+      max-width: 100% !important;
+    }
+        /* Masquer les colonnes Objectif, Statut, Inscription, Actions sur mobile */
+  .clients-table th:nth-child(3),
+  .clients-table th:nth-child(4),
+  .clients-table th:nth-child(5),
+  .clients-table th:nth-child(6),
+  .clients-table td:nth-child(3),
+  .clients-table td:nth-child(4),
+  .clients-table td:nth-child(5),
+  .clients-table td:nth-child(6) {
+    display: none !important;
+  }
+
+    /* Forcer chaque carte à occuper toute la largeur de sa colonne */
+    .kpi-card {
+      width: 100% !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+      padding: 8px 6px !important;
+      border-radius: 8px !important;
+    }
+
+    .kpi-card .kpi-bar {
+      height: 2px !important;
+    }
+    .kpi-card .kpi-label {
+      font-size: 7px !important;
+      letter-spacing: 0.04em !important;
+      margin-bottom: 2px !important;
+    }
+    .kpi-card .kpi-value {
+      font-size: 15px !important;
+      line-height: 1.2 !important;
+    }
+    .kpi-card .kpi-sub {
+      font-size: 6.5px !important;
+      margin-top: 1px !important;
+    }
+    .kpi-card .kpi-delta {
+      font-size: 7px !important;
+      margin-top: 1px !important;
+    }
+    .kpi-card .sparkline {
+      transform: scale(0.6);
+      transform-origin: left center;
+      margin-top: -2px !important;
+    }
+
+    /* Autres ajustements généraux */
     .grid3 { grid-template-columns: 1fr !important; }
     .grid2 { grid-template-columns: 1fr !important; }
-    table { font-size: 11px !important; }
+    table { font-size: 10px !important; }
+    .main-inner { padding: 10px !important; }
+    .sub-card-head { padding: 8px 10px !important; }
+    .sub-card-body { padding: 8px 10px !important; }
+    .sub-card-foot { padding: 6px 10px !important; flex-wrap: wrap; gap: 4px; }
+    .sub-card-foot .btn { font-size: 9px !important; padding: 4px 8px !important; }
+
+    .sub-card {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      box-sizing: border-box !important;
+    }
+
+    .subs-grid {
+      display: grid !important;
+      grid-template-columns: 1fr !important;
+      gap: 12px !important;
+      width: 100% !important;
+    }
   }
-`;
+
+  @media (max-width: 480px) {
+    .kpi-grid {
+      gap: 6px !important;
+    }
+    .kpi-card {
+      padding: 6px 5px !important;
+      border-radius: 6px !important;
+    }
+    .kpi-card .kpi-label {
+      font-size: 5.5px !important;
+      letter-spacing: 0.03em !important;
+      margin-bottom: 1px !important;
+    }
+    .kpi-card .kpi-value {
+      font-size: 12px !important;
+    }
+    .kpi-card .kpi-sub {
+      font-size: 5.5px !important;
+      margin-top: 0 !important;
+    }
+    .kpi-card .kpi-delta {
+      font-size: 6px !important;
+      margin-top: 0 !important;
+    }
+    .kpi-card .sparkline {
+      display: none !important;
+    }
+  }
+
+  /* Styles pour les cartes Arts Martiaux */
+  .arts-card {
+    transition: all 0.2s ease !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.02) !important;
+  }
+  .arts-card:hover:not(.disabled) {
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5), 0 0 0 2px rgba(74,222,128,0.3) !important;
+    transform: translateY(-2px) !important;
+  }
+  @media (max-width: 768px) {
+    .arts-grid {
+      grid-template-columns: repeat(2, 1fr) !important;
+      gap: 10px !important;
+    }
+  }
+    /* ===== Arts Martiaux ===== */
+
+.arts-dashboard-grid{
+    display:grid;
+    grid-template-columns:repeat(4,minmax(180px,1fr));
+    gap:14px;
+    justify-content:center;
+    align-items:stretch;
+}
+
+@media (max-width:768px){
+
+    .arts-dashboard-grid{
+        grid-template-columns:repeat(2,minmax(145px,170px));
+        justify-content:center;
+        gap:12px;
+    }
+
+    .arts-dashboard-grid > div{
+        width:100%;
+    }
+
+}
+
+  .app {
+    --bg: #090909;
+    --surface: #111111;
+    --surface2: #161616;
+    --surface3: #1a1a1a;
+    --border: #1e1e1e;
+    --border2: #252525;
+    --text: #e8e8e8;
+    --text-mid: #888;
+    --text-dim: #555;
+    --text-faint: #333;
+  }
+  .app.light-mode {
+    --bg: #f0f0f0;
+    --surface: #ffffff;
+    --surface2: #f7f7f7;
+    --surface3: #f0f0f0;
+    --border: #e0e0e0;
+    --border2: #d0d0d0;
+    --text: #1a1a1a;
+    --text-mid: #555555;
+    --text-dim: #777777;
+    --text-faint: #999999;
+    background: #f0f0f0 !important;
+    color: #1a1a1a !important;
+  }
+  .app.light-mode .card,
+  .app.light-mode .kpi-card,
+  .app.light-mode .sub-card,
+  .app.light-mode .modal-box {
+    background: #ffffff !important;
+    border-color: #d0d0d0 !important;
+  }
+  .app.light-mode .sidebar {
+    background: #f8f8f8 !important;
+    border-color: #d0d0d0 !important;
+  }
+  .app.light-mode .sidebar .nav-item {
+    color: #555 !important;
+  }
+  .app.light-mode .sidebar .nav-item.active {
+    background: #e8e8e8 !important;
+    color: #22a06b !important;
+    border-color: #d0d0d0 !important;
+  }
+  .app.light-mode .sidebar .logo {
+    border-color: #d0d0d0 !important;
+  }
+  .app.light-mode .sidebar .sidebar-foot {
+    border-color: #d0d0d0 !important;
+  }
+  .app.light-mode input,
+  .app.light-mode select,
+  .app.light-mode textarea {
+    background: #f5f5f5 !important;
+    border-color: #d0d0d0 !important;
+    color: #1a1a1a !important;
+  }
+  .app.light-mode input:focus,
+  .app.light-mode select:focus {
+    border-color: #22a06b !important;
+    box-shadow: 0 0 0 2px rgba(34,160,107,0.15) !important;
+  }
+  .app.light-mode .page-title {
+    color: #1a1a1a !important;
+  }
+  .app.light-mode .text-dim {
+    color: #666 !important;
+  }
+  .app.light-mode .text-faint {
+    color: #999 !important;
+  }
+  .app.light-mode .surface,
+  .app.light-mode .surface2,
+  .app.light-mode .surface3 {
+    background: #f5f5f5 !important;
+  }
+  .app.light-mode .border {
+    border-color: #d0d0d0 !important;
+  }
+  .app.light-mode .border2 {
+    border-color: #e0e0e0 !important;
+  }
+  .app.light-mode .offline-banner {
+    background: #fff3e0 !important;
+    border-color: #ffb74d !important;
+    color: #e65100 !important;
+  }
+  .app.light-mode .kpi-label {
+    color: #888 !important;
+  }
+  .app.light-mode .kpi-sub {
+    color: #999 !important;
+  }
+  .app.light-mode .empty-state {
+    color: #999 !important;
+  }
+  .app.light-mode .alert-row {
+    border-color: #e0e0e0 !important;
+  }
+  .app.light-mode .tx-row {
+    border-color: #e0e0e0 !important;
+  }
+  .app.light-mode .top-bar {
+    background: rgba(255,255,255,0.95) !important;
+    border-color: #d0d0d0 !important;
+  }
+  .app.light-mode .top-bar .mobile-hamburger {
+    color: #1a1a1a !important;
+  }
+  .app.light-mode .sub-card-head,
+  .app.light-mode .sub-card-body,
+  .app.light-mode .sub-card-foot {
+    border-color: #e0e0e0 !important;
+  }
+  .app.light-mode .sub-card-foot {
+    background: #f0f0f0 !important;
+  }
+  .app.light-mode .pill {
+    background: rgba(0,0,0,0.05) !important;
+  }
+  .app.light-mode .badge-active {
+    background: #e8f5e9 !important;
+    color: #2e7d32 !important;
+    border-color: #a5d6a7 !important;
+  }
+  .app.light-mode .badge-expiring {
+    background: #fff3e0 !important;
+    color: #e65100 !important;
+    border-color: #ffb74d !important;
+  }
+  .app.light-mode .badge-expired {
+    background: #ffebee !important;
+    color: #c62828 !important;
+    border-color: #ef9a9a !important;
+  }
+  .app.light-mode .progress {
+    background: #e0e0e0 !important;
+  }
+  .app.light-mode .role-badge-admin {
+    background: #fff8e1 !important;
+    color: #f57f17 !important;
+    border-color: #ffca28 !important;
+  }
+  .app.light-mode .role-badge-staff {
+    background: #e3f2fd !important;
+    color: #0d47a1 !important;
+    border-color: #90caf9 !important;
+  }
+  .app.light-mode .toast {
+    background: #ffffff !important;
+    border-color: #d0d0d0 !important;
+    color: #1a1a1a !important;
+  }
+  .app.light-mode .kpi-card .kpi-value {
+    color: #1a1a1a !important;
+  }
+  .app.light-mode .kpi-card .kpi-bar {
+    opacity: 0.6 !important;
+  }
+  .app.light-mode .sub-card .sub-card-head .text {
+    color: #1a1a1a !important;
+  }
+  .app.light-mode .sub-card .sub-card-body .text-mid {
+    color: #555 !important;
+  }
+  .app.light-mode .sub-card .sub-card-body .text-dim {
+    color: #777 !important;
+  }
+  .app.light-mode .sub-card .status-badge {
+    background: rgba(0,0,0,0.05) !important;
+  }
+  .app.light-mode .btn-ghost {
+    background: #f0f0f0 !important;
+    border-color: #d0d0d0 !important;
+    color: #555 !important;
+  }
+  .app.light-mode .btn-primary {
+    background: #e8f5e9 !important;
+    border-color: #a5d6a7 !important;
+    color: #2e7d32 !important;
+  }
+  .app.light-mode .btn-danger {
+    background: #ffebee !important;
+    border-color: #ef9a9a !important;
+    color: #c62828 !important;
+  }
+  .app.light-mode .search-bar {
+    background: #f5f5f5 !important;
+    border-color: #d0d0d0 !important;
+    color: #1a1a1a !important;
+  }
+  .app.light-mode .search-bar:focus {
+    border-color: #22a06b !important;
+  }
+  .app.light-mode .avatar {
+    background: rgba(0,0,0,0.08) !important;
+    border-color: rgba(0,0,0,0.15) !important;
+    color: #333 !important;
+  }
+  `;
 
 // ═══════════════════════════════════════════════════════════════════
 // 19-B. NOUVEAUX PARAMÈTRES AVANCÉS (admin uniquement)
@@ -2292,6 +4299,7 @@ function useSettings() {
       currency: "CDF",
       timezone: "Africa/Kinshasa",
       logoUrl: "",
+      darkMode: true, // ← Ajout du thème par défaut (sombre)
       
       // B. Paramètres des tarifs (abonnements)
       subscriptionPrices: {
@@ -2362,12 +4370,26 @@ function useSettings() {
 function AdvancedSettingsView() {
   const { role } = useAuth();
   const showToast = useToast();
-  const { settings, updateFlatSetting, resetToDefaults } = useSettings();
+  const { settings, updateFlatSetting, resetToDefaults } = useSettingsCtx();
   
   const [activeTab, setActiveTab] = useState("general");
   const [tempSubscriptionPrices, setTempSubscriptionPrices] = useState(settings.subscriptionPrices);
   const [tempSessionPrices, setTempSessionPrices] = useState(settings.sessionPrices);
   const [savingPrices, setSavingPrices] = useState(false);
+
+  // Assistant de suppression
+  const [deleteWizardOpen, setDeleteWizardOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+  const [deletePeriod, setDeletePeriod] = useState("today");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
+
+  const [deleteCalcLoading, setDeleteCalcLoading] = useState(false);
+  const [deleteCalc, setDeleteCalc] = useState(null);
+  const [deletePasswordInput, setDeletePasswordInput] = useState("");
+  const [deletePasswordError, setDeletePasswordError] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   // Seul l'admin peut accéder
   if (role !== "admin") {
@@ -2387,16 +4409,15 @@ function AdvancedSettingsView() {
     { id: "prices", label: "💰 Tarifs", icon: "💵" },
     { id: "notifications", label: "📱 Notifications", icon: "🔔" },
     { id: "sessions", label: "⏱️ Séances", icon: "⏱️" },
+    { id: "data", label: "🗄️ Données", icon: "🗄️" },
   ];
 
   const handleSavePrices = () => {
     setSavingPrices(true);
     try {
-      // Mise à jour des prix dans le state
       updateFlatSetting("subscriptionPrices", tempSubscriptionPrices);
       updateFlatSetting("sessionPrices", tempSessionPrices);
       
-      // Mise à jour des constantes globales pour une utilisation immédiate
       Object.keys(tempSubscriptionPrices).forEach(key => {
         if (SUB_TYPES[key]) SUB_TYPES[key].price = tempSubscriptionPrices[key];
       });
@@ -2418,6 +4439,126 @@ function AdvancedSettingsView() {
       setTempSubscriptionPrices(settings.subscriptionPrices);
       setTempSessionPrices(settings.sessionPrices);
       showToast("Paramètres réinitialisés", "Valeurs par défaut restaurées", "success");
+    }
+  };
+
+  // Calcule la plage de dates selon la période choisie dans l'assistant de suppression
+  const getDeletePeriodRange = () => {
+    const nowD = new Date();
+    const toStr = (d) => d.toISOString().split("T")[0];
+    const todayStr = toStr(nowD);
+
+    switch (deletePeriod) {
+      case "today":
+        return { from: todayStr, to: todayStr };
+      case "yesterday": {
+        const y = new Date(nowD);
+        y.setDate(nowD.getDate() - 1);
+        const yStr = toStr(y);
+        return { from: yStr, to: yStr };
+      }
+      case "last7": {
+        const d = new Date(nowD);
+        d.setDate(nowD.getDate() - 7);
+        return { from: toStr(d), to: todayStr };
+      }
+      case "last30": {
+        const d = new Date(nowD);
+        d.setDate(nowD.getDate() - 30);
+        return { from: toStr(d), to: todayStr };
+      }
+      case "thisMonth": {
+        const d = new Date(nowD.getFullYear(), nowD.getMonth(), 1);
+        return { from: toStr(d), to: todayStr };
+      }
+      case "previousMonth": {
+        const start = new Date(nowD.getFullYear(), nowD.getMonth() - 1, 1);
+        const end = new Date(nowD.getFullYear(), nowD.getMonth(), 0);
+        return { from: toStr(start), to: toStr(end) };
+      }
+      case "all":
+        return { from: "1970-01-01", to: todayStr };
+      case "custom":
+        return { from: customStart || todayStr, to: customEnd || todayStr };
+      default:
+        return { from: todayStr, to: todayStr };
+    }
+  };
+
+  // Étape 1 : calcule ce qui sera supprimé pour la période choisie
+  const handleCalculerSuppression = async () => {
+    if (deletePeriod === "custom" && (!customStart || !customEnd)) {
+      showToast("Dates manquantes", "Renseignez les deux dates de la plage personnalisée", "warning");
+      return;
+    }
+
+    setDeleteCalcLoading(true);
+    setDeleteCalc(null);
+    setDeletePasswordInput("");
+    setDeletePasswordError("");
+
+    try {
+      const { from, to } = getDeletePeriodRange();
+      const [resAbo, resCaisse, resSeances] = await Promise.all([
+        apiGet("abonnements"),
+        apiGet("caisse"),
+        apiGet("seances"),
+      ]);
+
+      const extract = (res) => Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
+      const inRange = (dateVal) => {
+        const d = String(dateVal || "").split("T")[0];
+        return d && d >= from && d <= to;
+      };
+
+      const abosFiltres = extract(resAbo).filter(a => inRange(a.debut));
+      const caisseFiltree = extract(resCaisse).filter(t => inRange(t.date));
+      const seancesFiltrees = extract(resSeances).filter(s => inRange(s.debut));
+
+      const totalCaisse = caisseFiltree.reduce((sum, t) => sum + (Number(t.montant) || 0), 0);
+
+      setDeleteCalc({
+        from, to,
+        abonnements: abosFiltres.length,
+        caisse: caisseFiltree.length,
+        seances: seancesFiltrees.length,
+        totalCaisse,
+      });
+    } catch (err) {
+      showToast("Erreur", "Impossible de calculer les données à supprimer", "error");
+    } finally {
+      setDeleteCalcLoading(false);
+    }
+  };
+
+  // Étape 2 : vérifie le mot de passe admin puis supprime réellement
+  const handleConfirmerSuppression = async () => {
+    const passwords = pwdManager.load();
+    if (deletePasswordInput !== passwords.admin) {
+      setDeletePasswordError("Mot de passe incorrect.");
+      return;
+    }
+    setDeletePasswordError("");
+    setDeleting(true);
+    try {
+      const { from, to } = getDeletePeriodRange();
+      await apiPost("deleteByPeriod", {
+        debut: from,
+        fin: to,
+        cibles: { abonnements: true, caisse: true, seances: true },
+      });
+      showToast(
+        "Suppression effectuée",
+        "Les données seront à jour au prochain rafraîchissement.",
+        "success"
+      );
+      setDeleteWizardOpen(false);
+      setDeleteCalc(null);
+      setDeletePasswordInput("");
+    } catch (err) {
+      showToast("Erreur", "La suppression a échoué", "error");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -2474,6 +4615,33 @@ function AdvancedSettingsView() {
               <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
                 <div style={{ width: 40, height: 40, background: settings.primaryColor, borderRadius: 8, border: `1px solid ${T.border}` }} />
                 <span style={{ fontSize: 11, color: T.textDim, alignSelf: "center" }}>Aperçu de la couleur</span>
+              </div>
+
+              {/* Thème sombre/clair */}
+              <div style={{ 
+                marginTop: 16, 
+                paddingTop: 16,
+                borderTop: `1px solid ${T.border}`,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Thème de l'application</div>
+                    <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>
+                      {settings.darkMode ? "Mode sombre actif" : "Mode clair actif"}
+                    </div>
+                  </div>
+                  <span
+                    style={{
+                      ...S.fPill(settings.darkMode),
+                      padding: "6px 16px",
+                      cursor: "pointer",
+                      fontSize: 12,
+                    }}
+                    onClick={() => updateFlatSetting("darkMode", !settings.darkMode)}
+                  >
+                    {settings.darkMode ? "🌙 Sombre" : "☀️ Clair"}
+                  </span>
+                </div>
               </div>
               
               <Sel
@@ -2669,7 +4837,264 @@ function AdvancedSettingsView() {
             </div>
           </div>
         )}
+
+        {/* F. GESTION DES DONNÉES */}
+        {activeTab === "data" && (
+          <div>
+            <div style={S.cardHead}>
+              <span style={S.cardTitle}>🗄️ Gestion des données</span>
+            </div>
+
+            <div style={{ padding: "18px" }}>
+
+              <div
+                style={{
+                  padding: "12px",
+                  marginBottom: 22,
+                  borderRadius: 8,
+                  background: "#3a2b00",
+                  border: "1px solid #6b4f00",
+                  color: "#ffd86b",
+                  fontSize: 12,
+                  lineHeight: 1.5
+                }}
+              >
+                ⚠️ Les outils ci-dessous permettent de gérer les données de
+                l'application. Les actions de suppression sont irréversibles.
+              </div>
+
+              {/* Carte Suppression */}
+              <div
+                style={{
+                  border: `1px solid ${T.border}`,
+                  background: T.surface,
+                  borderRadius: 12,
+                  padding: 18,
+                  marginBottom: 18
+                }}
+              >
+                <div style={{ fontSize: 22, marginBottom: 10 }}>
+                  🗑️
+                </div>
+
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>
+                  Supprimer des données
+                </div>
+
+                <div
+                  style={{
+                    color: T.textDim,
+                    fontSize: 12,
+                    marginBottom: 18,
+                    lineHeight: 1.5
+                  }}
+                >
+                  Supprime les données d'une période précise sans toucher aux
+                  autres enregistrements.
+                </div>
+
+                <button
+                  style={{
+                    ...S.btn("primary"),
+                    width: "100%",
+                    justifyContent: "center"
+                  }}
+                  onClick={() => setDeleteWizardOpen(true)}
+                >
+                  Ouvrir →
+                </button>
+              </div>
+
+              {/* Carte Réinitialisation */}
+              <div
+                style={{
+                  border: `1px solid ${T.redBd}`,
+                  background: T.surface,
+                  borderRadius: 12,
+                  padding: 18
+                }}
+              >
+                <div style={{ fontSize: 22, marginBottom: 10 }}>
+                  ☠️
+                </div>
+
+                <div
+                  style={{
+                    fontWeight: 700,
+                    fontSize: 15,
+                    marginBottom: 6,
+                    color: T.red
+                  }}
+                >
+                  Réinitialiser complètement l'application
+                </div>
+
+                <div
+                  style={{
+                    color: T.textDim,
+                    fontSize: 12,
+                    marginBottom: 18,
+                    lineHeight: 1.5
+                  }}
+                >
+                  Efface toutes les données du système et remet l'application à
+                  son état initial.
+                </div>
+
+                <button
+                  style={{
+                    ...S.btn("danger"),
+                    width: "100%",
+                    justifyContent: "center",
+                    opacity: .55,
+                    cursor: "not-allowed"
+                  }}
+                  disabled
+                >
+                  🚧 Bientôt disponible
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
       </div>
+
+      <Modal
+        open={deleteWizardOpen}
+        onClose={() => setDeleteWizardOpen(false)}
+        title="🗑️ Assistant de suppression"
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{
+            padding: 12,
+            border: `1px solid ${T.border}`,
+            borderRadius: 8,
+            background: T.surface2,
+            fontSize: 12,
+            color: T.textDim
+          }}>
+            Choisissez la période des données à supprimer.
+          </div>
+
+          {[
+            ["today","Aujourd'hui"],
+            ["yesterday","Hier"],
+            ["last7","7 derniers jours"],
+            ["last30","30 derniers jours"],
+            ["thisMonth","Ce mois"],
+            ["previousMonth","Mois précédent"],
+            ["all","Depuis le début"],
+            ["custom","Plage personnalisée"]
+          ].map(([value,label]) => (
+            <label
+              key={value}
+              style={{
+                display:"flex",
+                alignItems:"center",
+                gap:10,
+                cursor:"pointer"
+              }}
+            >
+              <input
+                type="radio"
+                checked={deletePeriod===value}
+                onChange={()=>setDeletePeriod(value)}
+              />
+              {label}
+            </label>
+          ))}
+
+          {deletePeriod==="custom" && (
+            <div style={{
+              display:"grid",
+              gridTemplateColumns:"1fr 1fr",
+              gap:10
+            }}>
+              <Inp
+                label="Date début"
+                type="date"
+                value={customStart}
+                onChange={e=>setCustomStart(e.target.value)}
+              />
+              <Inp
+                label="Date fin"
+                type="date"
+                value={customEnd}
+                onChange={e=>setCustomEnd(e.target.value)}
+              />
+            </div>
+          )}
+
+          <button
+            style={{
+              ...S.btn("primary"),
+              width:"100%",
+              justifyContent:"center",
+              opacity: deleteCalcLoading ? .6 : 1
+            }}
+            disabled={deleteCalcLoading}
+            onClick={handleCalculerSuppression}
+          >
+            {deleteCalcLoading ? "Calcul en cours..." : "Continuer →"}
+          </button>
+
+          {deleteCalc && (
+            <div style={{
+              padding: 14,
+              border: `1px solid ${T.redBd}`,
+              borderRadius: 8,
+              background: T.redDark,
+              fontSize: 12,
+              color: T.text,
+              lineHeight: 1.7
+            }}>
+              <div style={{ fontWeight: 700, marginBottom: 8, color: T.red }}>
+                ⚠️ Vous allez supprimer définitivement :
+              </div>
+              <div>• {deleteCalc.abonnements} abonnement(s)</div>
+              <div>• {deleteCalc.seances} séance(s)</div>
+              <div>• {deleteCalc.caisse} transaction(s) de caisse — {fmtGNF(deleteCalc.totalCaisse)}</div>
+              <div style={{ marginTop: 8, color: T.textDim }}>
+                Période : {deleteCalc.from} → {deleteCalc.to}
+              </div>
+
+              {(deleteCalc.abonnements + deleteCalc.seances + deleteCalc.caisse) === 0 ? (
+                <div style={{ marginTop: 10, color: T.textDim }}>
+                  Aucune donnée à supprimer pour cette période.
+                </div>
+              ) : (
+                <div style={{ marginTop: 14 }}>
+                  <Inp
+                    label="Mot de passe admin pour confirmer"
+                    type="password"
+                    value={deletePasswordInput}
+                    onChange={e => { setDeletePasswordInput(e.target.value); setDeletePasswordError(""); }}
+                  />
+                  {deletePasswordError && (
+                    <div style={{ color: T.red, fontSize: 11, marginTop: 4 }}>
+                      ⚠ {deletePasswordError}
+                    </div>
+                  )}
+                  <button
+                    style={{
+                      ...S.btn("danger"),
+                      width: "100%",
+                      justifyContent: "center",
+                      marginTop: 10,
+                      opacity: deleting ? .6 : 1
+                    }}
+                    disabled={deleting}
+                    onClick={handleConfirmerSuppression}
+                  >
+                    {deleting ? "Suppression..." : "🗑️ Confirmer la suppression"}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }
