@@ -1,0 +1,21 @@
+{
+  "short_name": "CoachGym",
+  "name": "Coach - Gym Nouvel Élan",
+  "icons": [
+    {
+      "src": "/icon-192.jpeg",
+      "type": "image/jpeg",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icon-512.jpeg",
+      "type": "image/jpeg",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/coach.html",
+  "background_color": "#090909",
+  "theme_color": "#4ade80",
+  "display": "standalone",
+  "orientation": "portrait"
+}
