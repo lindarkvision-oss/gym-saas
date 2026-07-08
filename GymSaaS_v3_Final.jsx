@@ -694,8 +694,6 @@ function QRScannerModal({ open, onClose, abonnements, clients, onCheckIn, onStar
   const [scannedAbo, setScannedAbo] = useState(null);
   const [scannedClient, setScannedClient] = useState(null);
   const [seanceLancee, setSeanceLancee] = useState(false);
-  const [pointageModal, setPointageModal] = useState(false);
-  const [pointageData, setPointageData] = useState(null);
   const scannerRef = useRef(null);
   const videoRef = useRef(null);
 
@@ -815,20 +813,18 @@ function QRScannerModal({ open, onClose, abonnements, clients, onCheckIn, onStar
   };
 
   const handlePointer = async () => {
-  if (!scannedAbo) return;
-  const success = await onCheckIn(scannedAbo.id);
-  if (success) {
-    const client = clients.find(c => c.id === scannedAbo.client_id);
-    setPointageData({
-      client,
-      abonnement: {
-        ...scannedAbo,
-        seances_restantes: Math.max(0, scannedAbo.seances_restantes - 1)
-      }
-    });
-    setPointageModal(true);
-  }
-};
+    if (!scannedAbo) return;
+    // Utiliser la fonction onCheckIn existante
+    const success = await onCheckIn(scannedAbo.id);
+    if (success) {
+      // Mettre à jour l'abonnement localement (le state sera mis à jour par onCheckIn)
+      showToast("Séance pointée", "Pointage effectué avec succès", "success");
+      // Fermer la modale après un court délai
+      setTimeout(() => {
+        onClose();
+      }, 1500);
+    }
+  };
 
   const handleLancerSeance = () => {
     if (!scannedClient) return;
@@ -982,94 +978,6 @@ function QRScannerModal({ open, onClose, abonnements, clients, onCheckIn, onStar
           </div>
         )}
       </div>
-
-      {/* Modal de pointage (identique à celle de AbonnementsView) */}
-      <Modal
-        open={pointageModal}
-        onClose={() => setPointageModal(false)}
-        title="Pointage effectué avec succès"
-        closeOnOverlay={false}
-      >
-        {pointageData && (
-          <>
-            <div
-              style={{
-                background: T.surface2,
-                border: `1px solid ${T.border}`,
-                borderRadius: 10,
-                padding: 14,
-                marginBottom: 18,
-                lineHeight: 1.7,
-                fontSize: 13
-              }}
-            >
-              <div><strong>👤 Client :</strong> {pointageData.client?.nom}</div>
-              <div><strong>🏋️ Formule :</strong> {SUB_TYPES[pointageData.abonnement.type]?.label}</div>
-              <div><strong>📅 Début :</strong> {fmtDate(pointageData.abonnement.debut)}</div>
-              <div><strong>📅 Fin :</strong> {fmtDate(pointageData.abonnement.fin)}</div>
-              <div>
-                <strong>🎯 Séances restantes :</strong>{" "}
-                {pointageData.abonnement.seances_restantes}
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: 10
-              }}
-            >
-              <button
-                style={S.btn("ghost")}
-                onClick={() => {
-                  setPointageModal(false);
-                  onClose();
-                }}
-              >
-                Annuler
-              </button>
-
-              <button
-                style={S.btn("wa")}
-                onClick={() => {
-                  if (!pointageData?.client?.telephone) {
-                    showToast(
-                      "Téléphone manquant",
-                      "Ce client ne possède pas de numéro WhatsApp.",
-                      "error"
-                    );
-                    return;
-                  }
-
-                  const message = `Bonjour ${pointageData.client.nom},
-
-✅ Votre séance a bien été enregistrée.
-
-🏋️ Formule : ${SUB_TYPES[pointageData.abonnement.type]?.label}
-
-📅 Début : ${fmtDate(pointageData.abonnement.debut)}
-📅 Fin : ${fmtDate(pointageData.abonnement.fin)}
-
-🎯 Séances restantes : ${pointageData.abonnement.seances_restantes}
-
-Merci pour votre confiance.
-Gym Nouvel Élan 💪`;
-
-                  const url = `https://wa.me/${pointageData.client.telephone.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`;
-
-                  window.open(url, "_blank");
-
-                  setPointageModal(false);
-                  onClose();
-                }}
-              >
-                💬 Envoyer la confirmation
-              </button>
-            </div>
-          </>
-        )}
-      </Modal>
     </Modal>
   );
 }
