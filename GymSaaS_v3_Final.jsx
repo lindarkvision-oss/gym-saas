@@ -2050,7 +2050,7 @@ const ClientsView = memo(({ clients, abonnements, caisse, now, syncing, onAdd, o
 // 16. VUE ABONNEMENTS
 // ═══════════════════════════════════════════════════════════════════
 
-const AbonnementsView = memo(({ abonnements, clients, now, syncing, onAdd, onDelete, onCheckIn }) => {
+const AbonnementsView = memo(({ abonnements, clients, now, syncing, onAdd, onDelete, onCheckIn, onStartSeance }) => {
   const { role } = useAuth();
   const showToast = useToast();
 
@@ -2065,9 +2065,11 @@ const [pointageModal, setPointageModal] = useState(false);
 const [pointageData, setPointageData] = useState(null);
 const [qrModalData, setQrModalData] = useState(null);
 const [qrModalOpen, setQrModalOpen] = useState(false);
+const [qrScannerOpen, setQrScannerOpen] = useState(false);
 
 // --- CE QUE VOUS VENEZ DE COLLER ICI ---
 const [clientSearch, setClientSearch] = useState("");
+const [clientSelectionModal, setClientSelectionModal] = useState(false);
 const clientsFiltres = useMemo(() => {
     if (!clientSearch) return clients;
     const low = clientSearch.toLowerCase();
@@ -2141,7 +2143,10 @@ const clientsFiltres = useMemo(() => {
           <h1 style={S.pageTitle}>Abonnements {syncing && <span style={{ fontSize: 13, color: T.textDim, fontWeight: 400 }}>⟳</span>}</h1>
           <div style={S.pageSubtitle}>{abonnements.length} abonnements · {filtered.length} affichés</div>
         </div>
-        <button style={S.btn("primary")} onClick={() => setModalAdd(true)}>+ Nouvel abonnement</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button style={S.btn("blue")} onClick={() => setQrScannerOpen(true)}>📷 Scanner</button>
+          <button style={S.btn("primary")} onClick={() => setModalAdd(true)}>+ Nouvel abonnement</button>
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
@@ -2230,14 +2235,26 @@ const client = clients.find(c => c.id === a.client_id) || { nom: "Client Inconnu
 {/* Modal nouveau */}
       <Modal open={modalAdd} onClose={() => { setModalAdd(false); setClientSearch(""); }} title="Créer un abonnement">
         
-        <div style={{ marginBottom: 12 }}>
-          <SearchBar value={clientSearch} onChange={setClientSearch} placeholder="Rechercher par nom ou numéro..." />
-        </div>
-
-        <Sel label="Client *" value={form.client_id} onChange={e => setForm({ ...form, client_id: e.target.value })}>
-          <option value="">Sélectionner un client...</option>
-          {clientsFiltres.map(c => <option key={c.id} value={c.id}>{c.nom} {c.telephone ? `(${c.telephone})` : ""}</option>)}
-        </Sel>
+        <Field label="Client *">
+          <div 
+            style={{ 
+              ...S.input, 
+              display: "flex", 
+              alignItems: "center", 
+              justifyContent: "space-between",
+              cursor: "pointer",
+              background: T.surface2,
+            }}
+            onClick={() => setClientSelectionModal(true)}
+          >
+            <span style={{ color: form.client_id ? T.text : T.textDim }}>
+              {form.client_id 
+                ? clients.find(c => c.id === form.client_id)?.nom || "Client sélectionné" 
+                : "Sélectionner un client..."}
+            </span>
+            <span style={{ color: T.textDim, fontSize: 12 }}>▼</span>
+          </div>
+        </Field>
        <Sel label="Formule *" value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
           <option value="">Sélectionner une formule...</option>
           {Object.entries(SUB_TYPES).map(([k, v]) => (
@@ -2349,6 +2366,95 @@ Gym Nouvel Élan 💪`;
     </>
   )}
       </Modal>
+            {/* Modal de sélection client */}
+      <Modal
+        open={clientSelectionModal}
+        onClose={() => setClientSelectionModal(false)}
+        title="👤 Sélectionner un client"
+        maxWidth={480}
+      >
+        <div style={{ marginBottom: 12 }}>
+          <SearchBar 
+            value={clientSearch} 
+            onChange={setClientSearch} 
+            placeholder="Rechercher par nom ou numéro..." 
+          />
+        </div>
+        <div style={{ maxHeight: 300, overflowY: "auto" }}>
+          {clients.length === 0 ? (
+            <div style={{ color: T.textDim, fontSize: 12, textAlign: "center", padding: "20px 0" }}>
+              Aucun client inscrit.
+              <br />
+              <span style={{ fontSize: 10, color: T.textFaint }}>Créez d'abord un client dans la vue Clients.</span>
+            </div>
+          ) : clientsFiltres.length === 0 ? (
+            <div style={{ color: T.textDim, fontSize: 12, textAlign: "center", padding: "20px 0" }}>
+              Aucun client ne correspond à votre recherche.
+            </div>
+          ) : (
+            clientsFiltres.map(c => {
+              const isSelected = form.client_id === c.id;
+              return (
+                <div
+                  key={c.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "10px 14px",
+                    borderRadius: 8,
+                    cursor: "pointer",
+                    background: isSelected ? T.greenDark : "transparent",
+                    border: `1px solid ${isSelected ? T.greenBd : "transparent"}`,
+                    marginBottom: 4,
+                    transition: "all 0.15s",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) e.currentTarget.style.background = T.surface3;
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) e.currentTarget.style.background = "transparent";
+                  }}
+                  onClick={() => {
+                    setForm({ ...form, client_id: c.id });
+                    setClientSearch("");
+                    setClientSelectionModal(false);
+                  }}
+                >
+                  <Avatar name={c.nom} idx={clients.indexOf(c)} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {c.nom}
+                      {isSelected && <span style={{ color: T.green, marginLeft: 6 }}>✓</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: T.textDim }}>
+                      {c.telephone || "Pas de tél."}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 10, color: T.textDim, textAlign: "right" }}>
+                    {c.statut === "actif" ? "🟢 Actif" : "⚪ Inactif"}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+        <button
+          style={{ ...S.btn("ghost"), width: "100%", justifyContent: "center", marginTop: 10 }}
+          onClick={() => setClientSelectionModal(false)}
+        >
+          Annuler
+        </button>
+      </Modal>
+            {/* Modal Scanner QR Code */}
+      <QRScannerModal
+        open={qrScannerOpen}
+        onClose={() => setQrScannerOpen(false)}
+        abonnements={abonnements}
+        clients={clients}
+        onCheckIn={onCheckIn}
+        onStartSeance={onStartSeance}
+      />
 
       {/* Modal QR Code */}
       <QRCodeModal
@@ -4503,8 +4609,17 @@ export default function App() {
                     <ClientsView clients={clients} abonnements={abonnements} caisse={caisse} now={now} syncing={syncing} onAdd={handleAddClient} onDelete={handleDeleteClient} />
                   )}
                   {view === "abonnements" && (
-                    <AbonnementsView abonnements={abonnements} clients={clients} now={now} syncing={syncing} onAdd={handleAddAbonnement} onDelete={handleDeleteAbonnement} onCheckIn={handleCheckIn} />
-                  )}
+  <AbonnementsView 
+    abonnements={abonnements} 
+    clients={clients} 
+    now={now} 
+    syncing={syncing} 
+    onAdd={handleAddAbonnement} 
+    onDelete={handleDeleteAbonnement} 
+    onCheckIn={handleCheckIn}
+    onStartSeance={handleStartSeance}
+  />
+)}
                   {view === "seances" && (
                     <SeancesView 
                       seancesActives={seancesActives} 
