@@ -32,7 +32,7 @@ import { Html5Qrcode } from "html5-qrcode";
 
 const CONFIG = {
   API_URL: "https://script.google.com/macros/s/AKfycbw2X-CBg8RKbKFaJVNWHBa_Y6hTZYpThUt_C6M7YRpNhRxrKBavWU3aDxe_dtJ-U28h/exec",
-  API_URL_ARTS: "https://script.google.com/macros/s/AKfycbw4bF9g2VOGexXNDEnp-ZC7A3sLcAIz86vvclB3PEFxvn9ZfOEWcHcnUdxPRcIBzRf09g/exec",
+  API_URL_ARTS: "https://script.google.com/macros/s/AKfycbzrxM5V9GC4AhOyjnS9KARyKmrsdJ6F3zN0vlSEnSKzpSx8u5_zasWuyAKHbVFyNjZ03g/exec",
   APP_NAME: "Gym Nouvel Élan",
   VERSION: "2.1.0",
   PASSWORDS_KEY: "gym_passwords",
@@ -103,22 +103,163 @@ const can = (role, permission) => PERMISSIONS[role]?.includes(permission) ?? fal
 // 2. DONNÉES MÉTIER
 // ═══════════════════════════════════════════════════════════════════
 
-const SUB_TYPES = {
-  mensuel:   { label: "Mensuel Illimité",  price: 115_000, duration: 30, maxSessions: null },
-  seances16: { label: "16 Séances / Mois", price: 80_500, duration: 30, maxSessions: 16 },
-  seances12: { label: "12 Séances / Mois", price: 57_500, duration: 30, maxSessions: 12 },
-};
+// Fonctions pour obtenir les prix dynamiques
+function getSubscriptionPrices(config) {
+  const c = config || {};
+  return {
+    mensuel:   { label: "Mensuel Illimité",  price: Number(c.subscription_mensuel) || 115000, duration: 30, maxSessions: null },
+    seances16: { label: "16 Séances / Mois", price: Number(c.subscription_seances16) || 80500, duration: 30, maxSessions: 16 },
+    seances12: { label: "12 Séances / Mois", price: Number(c.subscription_seances12) || 57500, duration: 30, maxSessions: 12 },
+  };
+}
 
-const SESSION_RATES = {
-  no_coach_1h:     { label: "Sans coach — 1h",    price: 4_500,  durationMinutes: 60 },
-  no_coach_2h:     { label: "Sans coach — 2h",    price: 7_500, durationMinutes: 120 },
-  with_coach_1h:   { label: "Avec coach — 1h",    price: 6_500, durationMinutes: 60 },
-  with_coach_1h30: { label: "Avec coach — 1h30",  price: 8_000, durationMinutes: 90 },
-  with_coach_2h:   { label: "Avec coach — 2h",    price: 10_000, durationMinutes: 120 },
-};
+function getSessionRates(config) {
+  const c = config || {};
+  return {
+    no_coach_1h:     { label: "Sans coach — 1h",    price: Number(c.session_no_coach_1h) || 4500,  durationMinutes: 60 },
+    no_coach_2h:     { label: "Sans coach — 2h",    price: Number(c.session_no_coach_2h) || 7500, durationMinutes: 120 },
+    with_coach_1h:   { label: "Avec coach — 1h",    price: Number(c.session_with_coach_1h) || 6500, durationMinutes: 60 },
+    with_coach_1h30: { label: "Avec coach — 1h30",  price: Number(c.session_with_coach_1h30) || 8000, durationMinutes: 90 },
+    with_coach_2h:   { label: "Avec coach — 2h",    price: Number(c.session_with_coach_2h) || 10000, durationMinutes: 120 },
+  };
+}
+
+// Variables pour stocker les prix en mémoire (mise à jour par la config)
+let currentSubTypes = getSubscriptionPrices();
+let currentSessionRates = getSessionRates();
+
+// Fonction pour mettre à jour les prix
+function updatePrices(config) {
+  currentSubTypes = getSubscriptionPrices(config);
+  currentSessionRates = getSessionRates(config);
+}
+
+// Pour la compatibilité avec le code existant, on garde les constantes
+// mais elles seront écrasées par les prix dynamiques
+const SUB_TYPES = currentSubTypes;
+const SESSION_RATES = currentSessionRates;
 
 const OBJECTIFS = ["Perte de poids", "Prise de masse", "Entretien / Santé", "Cardio", "Préparation sportive"];
 const COLORS = ["#4ade80", "#60a5fa", "#f472b6", "#fb923c", "#a78bfa", "#34d399", "#fbbf24", "#e879f9"];
+
+// ═══════════════════════════════════════════════════════════════════
+// 2-B. HOOK CONFIGURATION (backend)
+// ═══════════════════════════════════════════════════════════════════
+
+// Clé localStorage pour le cache de configuration
+const CONFIG_CACHE_KEY = "gym_app_config";
+
+const defaultConfig = {
+  gymName: "Gym Nouvel Élan",
+  adminPassword: "Bavon1986",
+  staffPassword: "20GYM26",
+  subscription_mensuel: "115000",
+  subscription_seances16: "80500",
+  subscription_seances12: "57500",
+  session_no_coach_1h: "4500",
+  session_no_coach_2h: "7500",
+  session_with_coach_1h: "6500",
+  session_with_coach_1h30: "8000",
+  session_with_coach_2h: "10000",
+};
+
+function useAppConfig(showToast) {
+  const [config, setConfig] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Charger la configuration depuis le backend
+  const loadConfig = useCallback(async (silent = false) => {
+    if (!silent) setSyncing(true);
+    setError(null);
+    
+    try {
+      const res = await apiGetConfig();
+      
+      // Si la réponse est un tableau (format attendu)
+      const configData = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : res);
+      
+      if (configData && typeof configData === 'object') {
+        // Fusionner avec les valeurs par défaut
+        const merged = { ...defaultConfig };
+        Object.keys(configData).forEach(key => {
+          if (key in merged) {
+            merged[key] = String(configData[key]);
+          }
+        });
+        setConfig(merged);
+        // Mettre à jour les prix dans les constantes globales
+        updatePrices(merged);
+        // Sauvegarder en cache
+        try {
+          localStorage.setItem(CONFIG_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: merged }));
+        } catch {}
+        setLoading(false);
+        if (!silent) showToast("Configuration chargée", "Données synchronisées", "success");
+        return merged;
+      } else {
+        throw new Error("Format de données invalide");
+      }
+    } catch (err) {
+      // Fallback sur localStorage ou défaut
+      try {
+        const cached = localStorage.getItem(CONFIG_CACHE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed.data) {
+            setConfig(parsed.data);
+            setLoading(false);
+            if (!silent) showToast("Mode hors ligne", "Configuration depuis le cache", "warning");
+            return parsed.data;
+          }
+        }
+      } catch {}
+      
+      // Fallback sur les valeurs par défaut
+      setConfig({ ...defaultConfig });
+      setLoading(false);
+      if (!silent) showToast("Configuration par défaut", "Impossible de charger la config", "error");
+      return { ...defaultConfig };
+    } finally {
+      if (!silent) setSyncing(false);
+    }
+  }, [showToast]);
+
+  // Mettre à jour la configuration dans le backend
+  const updateConfig = useCallback(async (updates) => {
+    setSyncing(true);
+    try {
+      const current = config || defaultConfig;
+      const updated = { ...current, ...updates };
+      
+      const result = await apiUpdateConfig(updates);
+      if (result?.success) {
+        setConfig(updated);
+        // Mettre à jour le cache
+        try {
+          localStorage.setItem(CONFIG_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: updated }));
+        } catch {}
+        showToast("Configuration mise à jour", "Synchronisation réussie", "success");
+        return true;
+      } else {
+        throw new Error(result?.error || "Erreur inconnue");
+      }
+    } catch (err) {
+      showToast("Erreur", "Impossible de synchroniser les modifications", "error");
+      return false;
+    } finally {
+      setSyncing(false);
+    }
+  }, [config, showToast]);
+
+  // Chargement initial
+  useEffect(() => {
+    loadConfig(true);
+  }, []);
+
+  return { config, loading, syncing, error, loadConfig, updateConfig };
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // 3. SESSION
@@ -187,6 +328,13 @@ const apiPostArts = (action, data = {}) =>
     headers: { "Content-Type": "text/plain" },
     body: JSON.stringify({ action, ...data }),
   });
+
+// ─── API pour la configuration ──────────────────────────────────
+const apiGetConfig = () =>
+  fetchWithRetry(`${CONFIG.API_URL_ARTS}?sheet=config&t=${Date.now()}`);
+
+const apiUpdateConfig = (data) =>
+  apiPostArts("updateConfig", { data });
 
 /** Persistance locale (offline fallback) */
 const cache = {
@@ -1161,8 +1309,28 @@ function LoginScreen({ onLogin }) {
     if (!u || !password) { setError("Identifiant et mot de passe requis."); return; }
     const meta = USER_META[u];
     if (!meta) { setError("Identifiant inconnu. Utilisez 'admin' ou 'staff'."); return; }
-    const passwords = pwdManager.load();
-    if (password !== passwords[u]) { setError("Mot de passe incorrect."); return; }
+    
+    // Charger la configuration depuis le cache ou le backend
+    let storedPasswords = pwdManager.load();
+    
+    // Vérifier si on a une configuration du backend plus récente
+    try {
+      const cached = localStorage.getItem("gym_app_config");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.data) {
+          // Mettre à jour les mots de passe depuis la config backend
+          if (parsed.data.adminPassword) {
+            storedPasswords.admin = parsed.data.adminPassword;
+          }
+          if (parsed.data.staffPassword) {
+            storedPasswords.staff = parsed.data.staffPassword;
+          }
+        }
+      }
+    } catch (e) {}
+    
+    if (password !== storedPasswords[u]) { setError("Mot de passe incorrect."); return; }
     const session = { username: u, role: meta.role, displayName: meta.displayName };
     saveSession(session);
     onLogin(session);
@@ -4013,16 +4181,17 @@ function Sidebar({ view, setView, alertCount, syncing, offline, lastSync, onRefr
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 20. APP ROOT
+// 20. APP ROOT (version corrigée - hooks avant les retours)
 // ═══════════════════════════════════════════════════════════════════
 
 export default function App() {
+  // ── 1. TOUS LES USESTATE ──────────────────────────────────────
   const [user, setUser] = useState(() => loadSession());
   const [view, setView] = useState("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [now, setNow] = useState(new Date());
 
-  // Toast manager
+  // ── 2. TOUS LES HOOKS (TOUJOURS APPELÉS DANS LE MÊME ORDRE) ──
   const { toasts, showToast } = useToastManager();
 
   // Timer
@@ -4031,7 +4200,7 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
 
-  // Données
+  // Données Gym
   const {
     clients, setClients,
     abonnements, setAbonnements,
@@ -4041,31 +4210,26 @@ export default function App() {
     loadData,
   } = useGymData(showToast);
 
-  // Données arts martiaux (pour la gestion globale)
+  // Données Arts Martiaux
   const {
     eleves,
     paiements,
   } = useArtsMartiauxData(showToast);
 
-  // Récupération des paramètres (pour le thème)
+  // Paramètres (thème, etc.)
   const { settings, updateFlatSetting, resetToDefaults } = useSettings();
 
-  // Compteur alertes pour badge sidebar
+  // Configuration depuis le backend
+  const { config: appConfig, loading: configLoading, updateConfig } = useAppConfig(showToast);
+
+  // Compteur alertes
   const alertCount = useMemo(() =>
     abonnements.filter(a => ["expiring", "expired"].includes(getSubStatus(a.fin, now))).length,
     [abonnements, now]
   );
 
-  // ── LOGIN / LOGOUT ─────────────────────────────────────────────
-  if (!user) {
-    return (
-      <ToastContext.Provider value={showToast}>
-        <style>{GLOBAL_CSS}</style>
-        <LoginScreen onLogin={setUser} />
-        <ToastManager toasts={toasts} />
-      </ToastContext.Provider>
-    );
-  }
+  // ── 3. TOUS LES HANDLERS (useCallback) ──────────────────────
+  // (Déclarés AVANT les retours conditionnels pour maintenir l'ordre des hooks)
 
   const handleLogout = () => {
     clearSession();
@@ -4073,7 +4237,6 @@ export default function App() {
     showToast("Déconnecté", "À bientôt !", "info");
   };
 
-  // ── HANDLERS CLIENTS ───────────────────────────────────────────
   const handleAddClient = useCallback(async (form) => {
     const tempId = genId();
     const newClient = normalizeClient({ id: tempId, ...form, date_inscription: todayISO() });
@@ -4092,11 +4255,12 @@ export default function App() {
     try { await apiPost("deleteClient", { id }); } catch {}
   }, [setClients, setAbonnements, showToast]);
 
-  // ── HANDLERS ABONNEMENTS ───────────────────────────────────────
   const handleAddAbonnement = useCallback(async (client_id, type, debut) => {
     const client = clients.find(c => c.id === client_id);
     if (!client) return;
-    const cfg = SUB_TYPES[type];
+    // Utiliser les prix dynamiques
+    const subTypes = getSubscriptionPrices(appConfig);
+    const cfg = subTypes[type];
     const fin = addDays(debut, cfg.duration - 1);
     const tempAboId = genId();
     const tempTxId = genId();
@@ -4125,7 +4289,6 @@ export default function App() {
       showToast("Sync échouée", "Données sauvegardées localement", "error");
     }
     
-    // Retourner les données de l'abonnement créé
     return result;
   }, [clients, setAbonnements, setCaisse, showToast]);
 
@@ -4135,41 +4298,27 @@ export default function App() {
     try { await apiPost("deleteAbonnement", { id }); } catch {}
   }, [setAbonnements, showToast]);
 
-const handleCheckIn = useCallback(async (aboId) => {
+  const handleCheckIn = useCallback(async (aboId) => {
     const abo = abonnements.find(a => a.id === aboId);
-
     if (!abo) return false;
-
     if (abo.seances_restantes <= 0) {
-        showToast("Quota atteint", "Plus de séances disponibles", "error");
-        return false;
+      showToast("Quota atteint", "Plus de séances disponibles", "error");
+      return false;
     }
-
     const newRestantes = abo.seances_restantes - 1;
-
     setAbonnements(p =>
-        p.map(a =>
-            a.id === aboId
-                ? { ...a, seances_restantes: newRestantes }
-                : a
-        )
+      p.map(a => a.id === aboId ? { ...a, seances_restantes: newRestantes } : a)
     );
-
     showToast("Séance pointée", `${newRestantes} restante(s)`, "success");
-
     try {
-        await apiPost("checkIn", {
-            id: aboId,
-            seances_restantes: newRestantes
-        });
+      await apiPost("checkIn", { id: aboId, seances_restantes: newRestantes });
     } catch {}
-
     return true;
-}, [abonnements, setAbonnements, showToast]);
+  }, [abonnements, setAbonnements, showToast]);
 
-// ── HANDLERS SÉANCES ───────────────────────────────────────────
-const handleStartSeance = useCallback(async (data) => {
-    const rate = data.isMember ? { price: 0, durationMinutes: 120 } : SESSION_RATES[data.rateKey];
+  const handleStartSeance = useCallback(async (data) => {
+    const memberDuration = Number(appConfig?.memberSessionDuration) || 120;
+    const rate = data.isMember ? { price: 0, durationMinutes: memberDuration } : SESSION_RATES[data.rateKey];
     const newId = genId();
     const newSeance = { 
       id: newId, 
@@ -4182,17 +4331,14 @@ const handleStartSeance = useCallback(async (data) => {
       statut: "en_cours"
     };
 
-    // 1. Mise à jour de l'interface immédiatement
     setSeancesActives(p => [newSeance, ...p]);
     showToast("Séance démarrée", data.nom, "success");
 
-    // 2. NOUVEAU : Encaissement IMMÉDIAT pour les visiteurs (non membres)
     if (!data.isMember && rate.price > 0) {
       const montant = Number(rate.price);
       const tempId = genId();
       const desc = `Séance directe — ${data.nom} (${SESSION_RATES[data.rateKey]?.label || data.rateKey})`;
       
-      // On met dans la caisse locale
       setCaisse(p => [normalizeCaisse({ 
         id: tempId, 
         date: new Date().toISOString(), 
@@ -4203,20 +4349,13 @@ const handleStartSeance = useCallback(async (data) => {
       showToast("✅ Paiement encaissé", `${fmtGNF(montant)} pour la séance de ${data.nom}`, "success");
       
       try {
-        // A. Enregistrement de la séance
         await apiPost("startSeance", newSeance);
-        
-        // B. PAUSE de sécurité (800ms) pour éviter le conflit d'écriture sur Google Sheets
         await new Promise(resolve => setTimeout(resolve, 800));
-
-        // C. Enregistrement de la transaction dans l'onglet "caisse"
         const resTx = await apiPost("addTransaction", {
           date: new Date().toISOString(),
           description: desc,
           montant: montant
         });
-        
-        // Mise à jour de l'ID temporaire par l'ID réel retourné par Sheets
         if (resTx?.txId) {
           setCaisse(p => p.map(t => t.id === tempId ? { ...t, id: String(resTx.txId) } : t));
         }
@@ -4224,9 +4363,7 @@ const handleStartSeance = useCallback(async (data) => {
         console.error("Erreur lors de la synchronisation:", err);
         showToast("Erreur de synchronisation", "Vérifiez votre connexion ou l'onglet Caisse sur Sheets.", "error");
       }
-    } 
-    // 3. Pour les membres (gratuit, pas d'encaissement)
-    else {
+    } else {
       try {
         await apiPost("startSeance", newSeance);
       } catch (err) {
@@ -4234,14 +4371,12 @@ const handleStartSeance = useCallback(async (data) => {
         showToast("Erreur", "La séance n'a pas pu être synchronisée.", "error");
       }
     }
-  }, [setSeancesActives, setCaisse, showToast]);
-  
-const handleEndSeance = useCallback(async (id, sessionData) => {
+  }, [setSeancesActives, setCaisse, showToast, appConfig]);
+
+  const handleEndSeance = useCallback(async (id, sessionData) => {
     const s = sessionData || seancesActives.find(x => x.id === id);
     if (!s) return;
-    
     setSeancesActives(p => p.filter(x => x.id !== id));
-    
     if (!s.isMember) {
       showToast("Séance terminée", `${s.nom} a terminé sa séance`, "success");
       try { 
@@ -4252,7 +4387,7 @@ const handleEndSeance = useCallback(async (id, sessionData) => {
           debut: s.debut, 
           fin: new Date().toISOString(), 
           statut: "terminee",
-          montant: 0, // Très important : on envoie 0 pour ne pas créer de doublon en caisse
+          montant: 0,
           description: `Séance terminée — ${s.nom}`
         }); 
       } catch {}
@@ -4270,71 +4405,96 @@ const handleEndSeance = useCallback(async (id, sessionData) => {
       } catch {}
     }
   }, [seancesActives, setSeancesActives, showToast]);
-  // ── RENDU ──────────────────────────────────────────────────────
+
+  // ── 4. RETOURS CONDITIONNELS (UNIQUEMENT POUR LE LOGIN) ────
+  // Le login doit être traité avant tout, car on ne peut pas appeler de hooks après un return.
+  // Mais comme tous les hooks sont déjà déclarés avant, c'est sûr.
+
+  if (!user) {
+    return (
+      <ToastContext.Provider value={showToast}>
+        <style>{GLOBAL_CSS}</style>
+        <LoginScreen onLogin={setUser} />
+        <ToastManager toasts={toasts} />
+      </ToastContext.Provider>
+    );
+  }
+
+  // ── 5. RENDU FINAL AVEC CHARGEMENT CONDITIONNEL ────────────
+  // Plus de return anticipé pour configLoading.
+  // L'affichage du chargement est géré dans le JSX.
+
   const authValue = { ...user };
+
+  // On prépare l'écran de chargement de la configuration
+  const ConfigLoadingScreen = () => (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", gap: 16, background: "#090909", color: "#e8e8e8" }}>
+      <div style={S.spinner} />
+      <div style={{ color: T.textDim, fontSize: 13 }}>Chargement en cours...</div>
+    </div>
+  );
 
   return (
     <AuthContext.Provider value={authValue}>
       <ToastContext.Provider value={showToast}>
-        <SettingsContext.Provider value={{ settings, updateFlatSetting, resetToDefaults }}>
-        <style>{GLOBAL_CSS}</style>
+        <SettingsContext.Provider value={{ settings, updateFlatSetting, resetToDefaults, updateConfig }}>
+          <style>{GLOBAL_CSS}</style>
 
-        <div style={S.app} className={`app${settings?.darkMode === false ? " light-mode" : ""}`}>
-          {/* Top Bar */}
-          <div style={S.topBar} className="top-bar">
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", position: "relative" }}>
-              <button
-                className="mobile-hamburger"
-                onClick={() => setMobileMenuOpen(true)}
-                aria-label="Ouvrir le menu"
-              >☰</button>
-
-              {/* Nom centré */}
-              <span style={{
-                fontWeight: 800,
-                fontSize: 16,
-                color: T.text,
-                position: "absolute",
-                left: "50%",
-                transform: "translateX(-50%)",
-                whiteSpace: "nowrap"
-              }}>{CONFIG.APP_NAME}</span>
-
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 12, color: T.textDim, display: "none", "@media(min-width:700px)": { display: "block" } }}>{user.displayName}</span>
-                <span style={S.roleBadge(user.role)}>{user.role === "admin" ? "Admin" : "Staff"}</span>
+          <div style={S.app} className={`app${settings?.darkMode === false ? " light-mode" : ""}`}>
+            {/* Top Bar */}
+            <div style={S.topBar} className="top-bar">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", position: "relative" }}>
                 <button
-                  style={{ ...S.iconBtn("ghost"), width: 32, height: 32, fontSize: 16 }}
-                  onClick={handleLogout}
-                  title="Déconnexion"
-                >⏻</button>
+                  className="mobile-hamburger"
+                  onClick={() => setMobileMenuOpen(true)}
+                  aria-label="Ouvrir le menu"
+                >☰</button>
+
+                <span style={{
+                  fontWeight: 800,
+                  fontSize: 16,
+                  color: T.text,
+                  position: "absolute",
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  whiteSpace: "nowrap"
+                }}>{appConfig?.gymName || CONFIG.APP_NAME}</span>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 12, color: T.textDim, display: "none", "@media(min-width:700px)": { display: "block" } }}>{user.displayName}</span>
+                  <span style={S.roleBadge(user.role)}>{user.role === "admin" ? "Admin" : "Staff"}</span>
+                  <button
+                    style={{ ...S.iconBtn("ghost"), width: 32, height: 32, fontSize: 16 }}
+                    onClick={handleLogout}
+                    title="Déconnexion"
+                  >⏻</button>
+                </div>
               </div>
             </div>
-          </div>
 
-          {mobileMenuOpen && (
-            <div className="sidebar-overlay" onClick={() => setMobileMenuOpen(false)} />
-          )}
+            {mobileMenuOpen && (
+              <div className="sidebar-overlay" onClick={() => setMobileMenuOpen(false)} />
+            )}
 
-          <Sidebar
-            view={view} setView={setView}
-            alertCount={alertCount}
-            syncing={syncing} offline={offline} lastSync={lastSync}
-            onRefresh={() => loadData(true)}
-            onLogout={handleLogout}
-            mobileOpen={mobileMenuOpen}
-            onCloseMobile={() => setMobileMenuOpen(false)}
-          />
+            <Sidebar
+              view={view} setView={setView}
+              alertCount={alertCount}
+              syncing={syncing} offline={offline} lastSync={lastSync}
+              onRefresh={() => loadData(true)}
+              onLogout={handleLogout}
+              mobileOpen={mobileMenuOpen}
+              onCloseMobile={() => setMobileMenuOpen(false)}
+            />
 
-          <main style={S.main}>
-            {loading
-              ? (
+            <main style={S.main}>
+              {configLoading ? (
+                <ConfigLoadingScreen />
+              ) : loading ? (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "70vh", gap: 16 }}>
                   <div style={S.spinner} />
                   <div style={{ color: T.textDim, fontSize: 13 }}>Chargement des données...</div>
                 </div>
-              )
-              : (
+              ) : (
                 <div style={S.mainInner}>
                   {view === "dashboard" && (
                     <DashboardView clients={clients} abonnements={abonnements} caisse={caisse} seancesActives={seancesActives} now={now} offline={offline} />
@@ -4345,43 +4505,42 @@ const handleEndSeance = useCallback(async (id, sessionData) => {
                   {view === "abonnements" && (
                     <AbonnementsView abonnements={abonnements} clients={clients} now={now} syncing={syncing} onAdd={handleAddAbonnement} onDelete={handleDeleteAbonnement} onCheckIn={handleCheckIn} />
                   )}
-{view === "seances" && (
-  <SeancesView 
-    seancesActives={seancesActives} 
-    clients={clients} 
-    now={now} 
-    onStart={handleStartSeance} 
-    onEnd={handleEndSeance}
-    abonnements={abonnements}
-    onCheckIn={handleCheckIn}
-  />
-)}
-{view === "artsMartiaux" && (
-  <ArtsMartiauxView />
-)}
-{view === "gestionGlobale" && user.role === "admin" && (
-  <GestionGlobaleView 
-    gymCaisse={caisse}
-    artsPaiements={paiements}
-    clients={clients}
-    abonnements={abonnements}
-    eleves={eleves}
-    now={now}
-  />
-)}
-{view === "caisse" && can(user.role, "view_caisse") && (
-  <CaisseView caisse={caisse} now={now} syncing={syncing} />
-)}
-{view === "parametres" && user.role === "admin" && (
-  <ParametresViewV2 />
-)}
+                  {view === "seances" && (
+                    <SeancesView 
+                      seancesActives={seancesActives} 
+                      clients={clients} 
+                      now={now} 
+                      onStart={handleStartSeance} 
+                      onEnd={handleEndSeance}
+                      abonnements={abonnements}
+                      onCheckIn={handleCheckIn}
+                    />
+                  )}
+                  {view === "artsMartiaux" && (
+                    <ArtsMartiauxView />
+                  )}
+                  {view === "gestionGlobale" && user.role === "admin" && (
+                    <GestionGlobaleView 
+                      gymCaisse={caisse}
+                      artsPaiements={paiements}
+                      clients={clients}
+                      abonnements={abonnements}
+                      eleves={eleves}
+                      now={now}
+                    />
+                  )}
+                  {view === "caisse" && can(user.role, "view_caisse") && (
+                    <CaisseView caisse={caisse} now={now} syncing={syncing} />
+                  )}
+                  {view === "parametres" && user.role === "admin" && (
+                    <ParametresViewV2 />
+                  )}
                 </div>
-              )
-            }
-          </main>
-        </div>
+              )}
+            </main>
+          </div>
 
-        <ToastManager toasts={toasts} />
+          <ToastManager toasts={toasts} />
         </SettingsContext.Provider>
       </ToastContext.Provider>
     </AuthContext.Provider>
@@ -4967,22 +5126,46 @@ function AdvancedSettingsView() {
     { id: "data", label: "🗄️ Données", icon: "🗄️" },
   ];
 
-  const handleSavePrices = () => {
+  const handleSavePrices = async () => {
     setSavingPrices(true);
     try {
-      updateFlatSetting("subscriptionPrices", tempSubscriptionPrices);
-      updateFlatSetting("sessionPrices", tempSessionPrices);
+      // 1. Préparer les données à envoyer au backend
+      const configUpdates = {
+        subscription_mensuel: String(tempSubscriptionPrices.mensuel),
+        subscription_seances16: String(tempSubscriptionPrices.seances16),
+        subscription_seances12: String(tempSubscriptionPrices.seances12),
+        session_no_coach_1h: String(tempSessionPrices.no_coach_1h),
+        session_no_coach_2h: String(tempSessionPrices.no_coach_2h),
+        session_with_coach_1h: String(tempSessionPrices.with_coach_1h),
+        session_with_coach_1h30: String(tempSessionPrices.with_coach_1h30),
+        session_with_coach_2h: String(tempSessionPrices.with_coach_2h),
+      };
+
+      // 2. Envoyer au backend via updateConfig
+      const result = await updateConfig(configUpdates);
       
-      Object.keys(tempSubscriptionPrices).forEach(key => {
-        if (SUB_TYPES[key]) SUB_TYPES[key].price = tempSubscriptionPrices[key];
-      });
-      Object.keys(tempSessionPrices).forEach(key => {
-        if (SESSION_RATES[key]) SESSION_RATES[key].price = tempSessionPrices[key];
-      });
-      
-      showToast("Tarifs mis à jour", "Les nouveaux prix sont effectifs", "success");
+      if (result) {
+        // 3. Mettre à jour le localStorage
+        updateFlatSetting("subscriptionPrices", tempSubscriptionPrices);
+        updateFlatSetting("sessionPrices", tempSessionPrices);
+        
+        // 4. Mettre à jour les variables globales
+        Object.keys(tempSubscriptionPrices).forEach(key => {
+          if (currentSubTypes[key]) currentSubTypes[key].price = tempSubscriptionPrices[key];
+        });
+        Object.keys(tempSessionPrices).forEach(key => {
+          if (currentSessionRates[key]) currentSessionRates[key].price = tempSessionPrices[key];
+        });
+        
+        // 5. Mettre à jour les prix globaux
+        updatePrices(configUpdates);
+        
+        showToast("Tarifs mis à jour", "Les nouveaux prix sont synchronisés avec le serveur", "success");
+      } else {
+        throw new Error("Échec de la synchronisation");
+      }
     } catch (err) {
-      showToast("Erreur", "Impossible de sauvegarder les tarifs", "error");
+      showToast("Erreur", "Impossible de synchroniser les tarifs avec le serveur", "error");
     } finally {
       setSavingPrices(false);
     }
