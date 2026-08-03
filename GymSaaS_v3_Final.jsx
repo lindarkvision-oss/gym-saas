@@ -116,11 +116,11 @@ function getSubscriptionPrices(config) {
 function getSessionRates(config) {
   const c = config || {};
   return {
-    no_coach_1h:     { label: "Sans coach — 1h",    price: Number(c.session_no_coach_1h) || 4500,  durationMinutes: 60 },
-    no_coach_2h:     { label: "Sans coach — 2h",    price: Number(c.session_no_coach_2h) || 7500, durationMinutes: 120 },
-    with_coach_1h:   { label: "Avec coach — 1h",    price: Number(c.session_with_coach_1h) || 6500, durationMinutes: 60 },
-    with_coach_1h30: { label: "Avec coach — 1h30",  price: Number(c.session_with_coach_1h30) || 8000, durationMinutes: 90 },
-    with_coach_2h:   { label: "Avec coach — 2h",    price: Number(c.session_with_coach_2h) || 10000, durationMinutes: 120 },
+    no_coach_1h:     { label: "Sans coach — 1h",    price: Number(c.session_no_coach_1h) || 5000,  durationMinutes: 60 },
+    no_coach_2h:     { label: "Sans coach — 2h",    price: Number(c.session_no_coach_2h) || 7000, durationMinutes: 120 },
+    with_coach_1h:   { label: "Avec coach — 1h",    price: Number(c.session_with_coach_1h) || 7000, durationMinutes: 60 },
+    with_coach_1h30: { label: "Avec coach — 1h30",  price: Number(c.session_with_coach_1h30) || 9000, durationMinutes: 90 },
+    with_coach_2h:   { label: "Avec coach — 2h",    price: Number(c.session_with_coach_2h) || 12000, durationMinutes: 120 },
   };
 }
 
@@ -156,11 +156,11 @@ const defaultConfig = {
   subscription_mensuel: "115000",
   subscription_seances16: "80500",
   subscription_seances12: "57500",
-  session_no_coach_1h: "4500",
-  session_no_coach_2h: "7500",
-  session_with_coach_1h: "6500",
-  session_with_coach_1h30: "8000",
-  session_with_coach_2h: "10000",
+  session_no_coach_1h: "5000",
+  session_no_coach_2h: "7000",
+  session_with_coach_1h: "7000",
+  session_with_coach_1h30: "9000",
+  session_with_coach_2h: "12000",
 };
 
 function useAppConfig(showToast) {
@@ -5137,11 +5137,11 @@ function useSettings() {
         seances12: 57500,
       },
       sessionPrices: {
-        no_coach_1h: 4500,
-        no_coach_2h: 7500,
-        with_coach_1h: 6500,
-        with_coach_1h30: 8000,
-        with_coach_2h: 10000,
+        no_coach_1h: 5000,
+        no_coach_2h: 7000,
+        with_coach_1h: 7000,
+        with_coach_1h30: 9000,
+        with_coach_2h: 12000,
       },
       
       // C. Paramètres des notifications
@@ -5180,7 +5180,7 @@ function useSettings() {
       timezone: "Africa/Kinshasa",
       logoUrl: "",
       subscriptionPrices: { mensuel: 115000, seances16: 80500, seances12: 57500 },
-      sessionPrices: { no_coach_1h: 4500, no_coach_2h: 7500, with_coach_1h: 6500, with_coach_1h30: 8000, with_coach_2h: 10000 },
+      sessionPrices: { no_coach_1h: 5000, no_coach_2h: 7000, with_coach_1h: 7000, with_coach_1h30: 9000, with_coach_2h: 12000 },
       whatsappMessage: "Bonjour {name}, votre abonnement {status}. Venez renouveler au Gym Nouvel Élan 💪",
       alertDaysBefore: 3,
       enableNotifications: true,
